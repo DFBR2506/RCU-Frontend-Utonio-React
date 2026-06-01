@@ -1,0 +1,60 @@
+.patient-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-btn);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.patient-status.active {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green-dim);
+}
+
+.patient-status.inactive {
+  background: rgba(122, 122, 140, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.row-action {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.row-action:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--accent-lime);
+  color: var(--accent-lime);
+}
+
+.patient-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.floating-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .floating-row {
+    grid-template-columns: 1fr;
+  }
+}

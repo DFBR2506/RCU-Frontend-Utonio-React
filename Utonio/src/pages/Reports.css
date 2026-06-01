@@ -1,0 +1,95 @@
+.reports-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.reports-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: color 200ms ease;
+}
+
+.reports-tab:hover {
+  color: var(--text-primary);
+}
+
+.reports-tab.active {
+  color: var(--accent-lime);
+}
+
+.reports-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-lime);
+  border-radius: 2px 2px 0 0;
+}
+
+.reports-content {
+  padding: 32px;
+  min-height: 400px;
+}
+
+.chart-title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.chart-empty {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.chart-empty .chart-subtitle {
+  margin-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .reports-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .reports-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reports-tab {
+    padding: 10px 14px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .reports-content {
+    padding: 20px;
+    min-height: 320px;
+  }
+}

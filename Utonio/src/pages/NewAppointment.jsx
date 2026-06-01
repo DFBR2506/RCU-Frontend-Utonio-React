@@ -1,0 +1,381 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ChevronRight, ChevronLeft, Check, FileSignature, RotateCcw } from 'lucide-react';
+import { mockApi, SPECIALTIES, APPOINTMENT_TYPES, OFFICES } from '../services/mockData';
+import { useToast } from '../hooks/useToast';
+import useFormDraft, { draftAge } from '../hooks/useFormDraft';
+import TimeSlotGrid from '../components/UI/TimeSlotGrid';
+import './NewAppointment.css';
+
+const STEPS = [
+  { id: 1, label: 'Patient' },
+  { id: 2, label: 'Doctor' },
+  { id: 3, label: 'Date & Time' },
+  { id: 4, label: 'Type' },
+  { id: 5, label: 'Office' },
+  { id: 6, label: 'Review' },
+];
+
+const initialAppointment = (searchParams) => ({
+  patientId: '',
+  specialty: '',
+  doctorId: searchParams.get('doctorId') || '',
+  date: searchParams.get('date') || new Date().toISOString().split('T')[0],
+  time: searchParams.get('time') || '',
+  typeId: '',
+  officeId: '',
+});
+
+export default function NewAppointment() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [searchParams] = useSearchParams();
+  const [step, setStep] = useState(1);
+  const { state: data, setState: setData, hasDraft, savedAt, clear, reset } = useFormDraft(
+    'appointment-new',
+    () => initialAppointment(searchParams)
+  );
+  const [patients, setPatients] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (hasDraft && savedAt) {
+      toast.info(`Draft restored from ${draftAge(savedAt)}`, { title: 'Resuming appointment' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      const [pats, docs] = await Promise.all([mockApi.patients.list(), mockApi.doctors.list()]);
+      setPatients(pats);
+      setDoctors(docs);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (data.doctorId && data.date) {
+      mockApi.availability.get(parseInt(data.doctorId), data.date).then(setSlots);
+    } else {
+      Promise.resolve().then(() => setSlots([]));
+    }
+  }, [data.doctorId, data.date]);
+
+  const doctorsBySpecialty = data.specialty
+    ? doctors.filter(d => d.specialty === data.specialty && d.status === 'ACTIVE')
+    : doctors;
+
+  function canAdvance() {
+    if (step === 1) return !!data.patientId;
+    if (step === 2) return !!data.doctorId;
+    if (step === 3) return !!data.date && !!data.time;
+    if (step === 4) return !!data.typeId;
+    if (step === 5) return !!data.officeId;
+    return true;
+  }
+
+  function next() {
+    if (canAdvance()) {
+      if (step < 6) setStep(step + 1);
+    }
+  }
+
+  function prev() {
+    if (step > 1) setStep(step - 1);
+  }
+
+  async function submit() {
+    setSubmitting(true);
+    const apptType = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
+    try {
+      await mockApi.appointments.create({
+        patientId: parseInt(data.patientId),
+        doctorId: parseInt(data.doctorId),
+        officeId: parseInt(data.officeId),
+        typeId: data.typeId,
+        date: data.date,
+        time: data.time,
+        duration: apptType?.duration || 30,
+      });
+      const patientName = `${patient?.firstName ?? ''} ${patient?.lastName ?? ''}`.trim();
+      toast.success(`Appointment for ${patientName} created`, { title: 'Appointment scheduled' });
+      clear();
+      setSubmitting(false);
+      setConfirmed(true);
+    } catch (err) {
+      setSubmitting(false);
+      toast.error(err.message || 'Could not create appointment');
+    }
+  }
+
+  const patient = patients.find(p => p.id === parseInt(data.patientId));
+  const doctor = doctors.find(d => d.id === parseInt(data.doctorId));
+  const type = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
+  const office = OFFICES.find(o => o.id === parseInt(data.officeId));
+  const specialty = SPECIALTIES.find(s => s.id === doctor?.specialty);
+
+  if (confirmed) {
+    return (
+      <div className="app-layout fade-in">
+        <div className="confirmation-pulse card" style={{ textAlign: 'center', padding: '60px 40px' }}>
+          <div className="success-circle">
+            <Check size={48} strokeWidth={3} color="var(--bg-base)" />
+          </div>
+          <h1 className="page-title" style={{ marginTop: '24px' }}>Appointment Confirmed</h1>
+          <p className="page-subtitle">
+            {patient?.firstName} {patient?.lastName} with {doctor?.name}
+            <br />
+            {data.date} at {data.time}
+          </p>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
+            <button className="btn-secondary" onClick={() => navigate('/appointments')}>
+              View All Appointments
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setConfirmed(false);
+                setStep(1);
+                reset();
+              }}
+            >
+              New Appointment
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="app-layout">
+        <div className="skeleton" style={{ height: '40px', width: '200px', marginBottom: '32px' }} />
+        <div className="card skeleton" style={{ height: '400px' }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-layout fade-in">
+      <div className="page-header">
+        <h1 className="page-title">New Appointment</h1>
+        <p className="page-subtitle">Step {step} of 6 — {STEPS[step - 1].label}</p>
+      </div>
+
+      {hasDraft && savedAt ? (
+        <div className="draft-banner" role="status">
+          <FileSignature size={14} />
+          <span>Draft restored · {draftAge(savedAt)}</span>
+          <button type="button" className="draft-discard" onClick={reset}>
+            <RotateCcw size={12} />
+            Start over
+          </button>
+        </div>
+      ) : null}
+
+      <div className="wizard-progress">
+        <div
+          className="wizard-progress-fill"
+          style={{ width: `${(step / 6) * 100}%` }}
+        />
+      </div>
+
+      <div className="wizard-steps">
+        {STEPS.map(s => (
+          <div
+            key={s.id}
+            className={`wizard-step ${s.id <= step ? 'active' : ''} ${s.id === step ? 'current' : ''}`}
+          >
+            <div className="wizard-step-num">{s.id < step ? <Check size={14} /> : s.id}</div>
+            <span className="wizard-step-label">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="wizard-content card">
+        {step === 1 && (
+          <div>
+            <h3 className="wizard-section-title">Select Patient</h3>
+            <div className="patient-search">
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search by name or student ID..."
+                id="patient-search-input"
+              />
+            </div>
+            <div className="patient-list">
+              {patients.map(p => (
+                <button
+                  key={p.id}
+                  className={`patient-card ${data.patientId === String(p.id) ? 'selected' : ''}`}
+                  onClick={() => setData({ ...data, patientId: String(p.id) })}
+                >
+                  <div className="patient-card-name">{p.firstName} {p.lastName}</div>
+                  <div className="patient-card-meta">{p.studentId} · {p.email}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
+            <h3 className="wizard-section-title">Select Specialty & Doctor</h3>
+            <div className="specialty-tabs" style={{ marginBottom: '20px' }}>
+              <button
+                className={`specialty-tab ${!data.specialty ? 'active' : ''}`}
+                onClick={() => setData({ ...data, specialty: '', doctorId: '' })}
+              >
+                All
+              </button>
+              {SPECIALTIES.map(sp => (
+                <button
+                  key={sp.id}
+                  className={`specialty-tab ${data.specialty === sp.id ? 'active' : ''}`}
+                  onClick={() => setData({ ...data, specialty: sp.id, doctorId: '' })}
+                  style={data.specialty === sp.id ? { borderColor: sp.color, color: sp.color } : {}}
+                >
+                  {sp.name}
+                </button>
+              ))}
+            </div>
+            <div className="doctor-list">
+              {doctorsBySpecialty.map(d => {
+                const sp = SPECIALTIES.find(s => s.id === d.specialty);
+                return (
+                  <button
+                    key={d.id}
+                    className={`doctor-option ${data.doctorId === String(d.id) ? 'selected' : ''}`}
+                    onClick={() => setData({ ...data, doctorId: String(d.id) })}
+                    style={data.doctorId === String(d.id) && sp ? { borderColor: sp.color } : {}}
+                  >
+                    <div className="doctor-option-name">{d.name}</div>
+                    <div className="doctor-option-specialty" style={{ color: sp?.color }}>{sp?.name}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div>
+            <h3 className="wizard-section-title">Select Date & Time</h3>
+            <div className="form-group" style={{ maxWidth: 280, marginBottom: '24px' }}>
+              <label className="form-label" htmlFor="appt-date">Date</label>
+              <input
+                id="appt-date"
+                type="date"
+                className="form-input"
+                value={data.date}
+                onChange={(e) => setData({ ...data, date: e.target.value, time: '' })}
+              />
+            </div>
+            <h4 style={{ fontFamily: 'var(--font-heading)', marginBottom: '12px', fontSize: '14px' }}>Available Slots</h4>
+            <TimeSlotGrid
+              slots={slots}
+              selected={data.time}
+              onSelect={(time) => setData({ ...data, time })}
+              stagger={true}
+              gridKey={`${data.doctorId}-${data.date}`}
+            />
+          </div>
+        )}
+
+        {step === 4 && (
+          <div>
+            <h3 className="wizard-section-title">Select Appointment Type</h3>
+            <div className="type-grid">
+              {APPOINTMENT_TYPES.map(t => (
+                <button
+                  key={t.id}
+                  className={`type-card ${data.typeId === t.id ? 'selected' : ''}`}
+                  onClick={() => setData({ ...data, typeId: t.id })}
+                >
+                  <div className="type-card-name">{t.name}</div>
+                  <div className="type-card-duration">{t.duration} min</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 5 && (
+          <div>
+            <h3 className="wizard-section-title">Select Office</h3>
+            <div className="office-list">
+              {OFFICES.map(o => (
+                <button
+                  key={o.id}
+                  className={`office-card ${data.officeId === String(o.id) ? 'selected' : ''}`}
+                  onClick={() => setData({ ...data, officeId: String(o.id) })}
+                >
+                  <div className="office-card-name">{o.name}</div>
+                  <div className="office-card-floor">{o.floor}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 6 && (
+          <div>
+            <h3 className="wizard-section-title">Review & Confirm</h3>
+            <div className="review-grid">
+              <div className="review-row">
+                <div className="review-label">Patient</div>
+                <div className="review-value">{patient?.firstName} {patient?.lastName}</div>
+              </div>
+              <div className="review-row">
+                <div className="review-label">Doctor</div>
+                <div className="review-value">{doctor?.name} <span style={{ color: specialty?.color, fontSize: '13px' }}>· {specialty?.name}</span></div>
+              </div>
+              <div className="review-row">
+                <div className="review-label">Date</div>
+                <div className="review-value">{data.date}</div>
+              </div>
+              <div className="review-row">
+                <div className="review-label">Time</div>
+                <div className="review-value">{data.time}</div>
+              </div>
+              <div className="review-row">
+                <div className="review-label">Type</div>
+                <div className="review-value">{type?.name} ({type?.duration} min)</div>
+              </div>
+              <div className="review-row">
+                <div className="review-label">Office</div>
+                <div className="review-value">{office?.name}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="wizard-nav">
+        <button className="btn-secondary" onClick={prev} disabled={step === 1}>
+          <ChevronLeft size={16} />
+          Back
+        </button>
+        {step < 6 ? (
+          <button className="btn-primary" onClick={next} disabled={!canAdvance()}>
+            Next
+            <ChevronRight size={16} />
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Creating...' : 'Confirm Appointment'}
+            <Check size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,123 @@
+.time-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 10px;
+}
+
+.time-slot {
+  padding: 14px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+  text-align: center;
+  animation: fadeInUp 300ms var(--ease-out) backwards;
+}
+
+.time-slot.stagger {
+  animation-name: scoreboardLight;
+  animation-duration: 600ms;
+}
+
+.time-slot.stagger.unavailable {
+  animation-name: scoreboardLightDim;
+  animation-duration: 600ms;
+}
+
+.time-slot:hover:not(:disabled):not(.selected) {
+  background: var(--accent-lime-dim);
+  border-color: var(--accent-lime);
+  box-shadow: 0 0 12px var(--accent-lime-glow);
+  transform: translateY(-2px);
+}
+
+.time-slot.selected {
+  background: var(--accent-lime);
+  color: var(--bg-base);
+  border-color: var(--accent-lime);
+  font-weight: 700;
+  box-shadow: 0 0 20px var(--accent-lime-glow);
+}
+
+.time-slot.unavailable {
+  opacity: 0.3;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.time-slot-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+@keyframes scoreboardLight {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+    box-shadow: 0 0 0 transparent;
+    border-color: var(--border);
+    background: var(--glass-bg);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.06);
+    box-shadow: 0 0 22px var(--accent-lime-glow);
+    border-color: var(--accent-lime);
+    background: var(--accent-lime);
+    color: var(--bg-base);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.02);
+    box-shadow: 0 0 12px var(--accent-lime-glow);
+    border-color: var(--accent-lime-dim);
+    background: var(--accent-lime-dim);
+    color: var(--text-primary);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px var(--accent-lime-dim);
+    border-color: var(--border);
+    background: var(--glass-bg);
+    color: var(--text-primary);
+  }
+}
+
+@media (max-width: 480px) {
+  .time-slot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 6px;
+  }
+
+  .time-slot {
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+}
+
+@keyframes scoreboardLightDim {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  35% {
+    opacity: 0.6;
+    transform: scale(1.02);
+    box-shadow: 0 0 10px var(--accent-lime-dim);
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+    box-shadow: 0 0 0 transparent;
+  }
+}
