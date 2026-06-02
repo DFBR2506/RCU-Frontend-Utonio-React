@@ -42,7 +42,7 @@ export default function Doctors() {
         getSpecialties(),
       ]);
       setDoctors(docData.content || docData);
-      setSpecialties(specData);
+      setSpecialties(specData.content || specData || []);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load doctors');
