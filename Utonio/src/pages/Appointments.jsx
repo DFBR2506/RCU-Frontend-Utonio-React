@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Filter, CheckCircle, XCircle, AlertCircle, Search, X } from 'lucide-react';
-import { mockApi, APPOINTMENT_STATUSES } from '../services/api';
+import { api, APPOINTMENT_STATUSES } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import useDebounce from '../hooks/useDebounce';
 import Table from '../components/UI/Table';
@@ -51,10 +51,10 @@ export default function Appointments() {
     setLoading(true);
     try {
       const [appts, docs, pats, offs] = await Promise.all([
-        mockApi.appointments.list(),
-        mockApi.doctors.list(),
-        mockApi.patients.list(),
-        mockApi.offices.list(),
+        api.appointments.list(),
+        api.doctors.list(),
+        api.patients.list(),
+        api.offices.list(),
       ]);
       setAppointments(appts);
       setDoctors(docs);
@@ -90,7 +90,7 @@ export default function Appointments() {
   async function transition(newStatus) {
     if (!selected) return;
     try {
-      await mockApi.appointments.update(selected.id, { status: newStatus });
+      api.appointments.update(selected.id, { status: newStatus });
       await load();
       setSelected({ ...selected, status: newStatus });
       const patient = getPatientName(selected.patientId);

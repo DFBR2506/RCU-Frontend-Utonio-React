@@ -4,7 +4,8 @@ import {
   ArrowLeft, Mail, Phone, Calendar, CalendarPlus, Clock, CheckCircle2,
   AlertCircle, XCircle, Edit3, Activity, TrendingUp, ChevronRight,
 } from 'lucide-react';
-import { api, SPECIALTIES, APPOINTMENT_TYPES } from '../services/api';
+import { api } from '../services/api';
+import { APPOINTMENT_TYPES, SPECIALTIES } from '../data/constants';
 import StatusBadge from '../components/UI/StatusBadge';
 import ScheduleEditor from '../components/UI/ScheduleEditor';
 import EmptyState from '../components/UI/EmptyState';

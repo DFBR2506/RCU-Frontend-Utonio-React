@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Save, RotateCcw, AlertTriangle, CalendarOff } from 'lucide-react';
-import { mockApi } from '../../services/api';
+import { api } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import SlideOver from './SlideOver';
 import { findScheduleConflicts } from '../../utils/scheduleConflicts';
@@ -47,8 +47,8 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
     let cancelled = false;
     Promise.resolve().then(() => setLoading(true));
     Promise.all([
-      mockApi.doctors.getSchedule(doctor.id),
-      mockApi.appointments.list(),
+      api.doctors.getSchedule(doctor.id),
+      api.appointments.list(),
     ]).then(([s, appts]) => {
       if (cancelled) return;
       const normalized = normalizeSchedule(s?.weeklySchedule);
@@ -102,7 +102,7 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
   async function performSave() {
     setSaving(true);
     try {
-      await mockApi.doctors.saveSchedule(doctor.id, schedule);
+      await api.doctors.saveSchedule(doctor.id, schedule);
       setInitialSchedule(JSON.parse(JSON.stringify(schedule)));
       toast.success(`Schedule saved for ${doctor.name.replace('Dr. ', 'Dr. ')}`);
       if (onSaved) onSaved(doctor.id, schedule);

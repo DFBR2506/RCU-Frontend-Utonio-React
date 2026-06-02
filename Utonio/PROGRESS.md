@@ -480,3 +480,96 @@
 ---
 
 *Last updated: 2026-06-01 — Session 6 (Doctor Profile, Rich Search, Vitest, Mobile, Onboarding) complete; 48 tests passing; build + lint clean.*
+
+---
+
+## Session 7 — 2026-06-02 (Doctors module CRUD + Specialties management)
+
+### Completed ✅
+
+**Doctors CRUD (Create + Edit + Toggle Status)**
+- Added `api.doctors.create` and `api.doctors.update` methods to `src/services/api.js`
+- Added `mockApi.doctors.create` and `mockApi.doctors.update` to `src/services/mockData.js`
+- Rewrote `Doctors.jsx` — removed `mockApi` direct import, now uses `api.doctors.list()` through `load()`
+- Added "Add Doctor" button in the page header, "Edit" button on each doctor card, "Activate/Deactivate" toggle
+- `SlideOver` form with: Full Name (FloatingField), Specialty (select dropdown), Email (FloatingField), Phone (FloatingField)
+- Inline validation: required fields, email format check
+- Toast notifications on success/error
+- Reloads data after every mutation
+
+**Specialties CRUD (Create + Edit + Delete)**
+- Added `api.specialties.list/create/update/delete` methods to `src/services/api.js`
+- Added `mockApi.specialties.list/create/update/delete` to `src/services/mockData.js`
+- `SPECIALTIES` moved from `src/data/constants.js` to `src/services/mockData.js` (now mutable at runtime for mock mode)
+- Added "Specialty" button in the page header that opens a dedicated slide-over
+- Specialty form: name (FloatingField) + color palette picker (8 colors) + live preview badge
+- Delete protection: checks if any doctor uses the specialty before allowing deletion
+- Color palette preview shows the badge with the selected color in real-time
+
+**Removed direct mockApi usage**
+- `ScheduleEditor.jsx` — replaced `mockApi` import with `api` (uses `api.doctors.getSchedule/saveSchedule` and `api.appointments.list`)
+- `Doctors.jsx` — now uses only `api` (not `mockApi` directly)
+
+**API layer completeness**
+- All CRUD operations for doctors and specialties now have both mock and real API paths
+- `VITE_USE_MOCK=true` routes to mock; `false` routes to real backend at `VITE_API_URL`
+- Mock data properly exports `SPECIALTIES`, `DOCTORS`, `PATIENTS`, `APPOINTMENTS`, `DOCTOR_SCHEDULES`
+
+### Quality Gates
+- `pnpm build` ✅ succeeds
+- `pnpm lint` ✅ 0 errors, 0 warnings
+
+### Files Modified (Session 7)
+- `src/services/api.js` — added `doctors.create/update`, full `specialties` CRUD (list/create/update/delete)
+- `src/services/mockData.js` — added `doctors.create/update`, `specialties` CRUD, `SPECIALTIES` mutable for runtime changes
+- `src/pages/Doctors.jsx` — complete rewrite with doctor + specialty CRUD forms, SlideOver, validation, toast
+- `src/pages/Doctors.css` — added styles for forms, color picker, specialty preview, header layout, responsive
+- `src/components/UI/ScheduleEditor.jsx` — replaced `mockApi` with `api` for schedule/appointments calls
+
+---
+
+## Session 8 — 2026-06-02 (Mock removal — real API only)
+
+### Completed ✅
+
+**Removed all mock data and USE_MOCK toggle**
+- Rewrote `src/services/api.js` — pure real API client, no more `USE_MOCK` conditionals or `mockApi` references
+- Deleted `src/services/mockData.js` — all mock data, mockApi, constants re-exports gone
+- Deleted `src/test/mockApi.test.js` — tests for mockApi no longer relevant
+- Updated `.env` — removed `VITE_USE_MOCK=true`, now only `VITE_API_URL`
+- `api.js` now exports constants (`SPECIALTIES`, `APPOINTMENT_TYPES`, `OFFICES`, etc.) from `constants.js`
+
+**Updated pages to use `api` instead of `mockApi`:**
+- `NewAppointment.jsx` — replaced `mockApi` with `api` for patients/doctors/specialties/appointments/availability; specialties loaded from API via `api.specialties.list()`
+- `Availability.jsx` — replaced `mockApi` with `api` for doctors/specialties/availability
+- `Reports.jsx` — replaced `mockApi` with `api` for all three report endpoints
+- `Appointments.jsx` — replaced `mockApi` with `api` for appointments/doctors/patients/offices
+- `DoctorProfile.jsx` — removed stale `SPECIALTIES`/`APPOINTMENT_TYPES` from api import; now from `constants.js`
+- `ScheduleEditor.jsx` — already using `api` (updated in Session 7)
+- `Doctors.jsx` — already using `api` (updated in Session 7)
+
+**Remaining static reference data:**
+- `constants.js` still exports `SPECIALTIES`, `APPOINTMENT_TYPES`, `OFFICES`, `APPOINTMENT_STATUSES`, `HOUR_BLOCKS`, `FULL_HOURS`, `TIME_SLOTS` — these are UI config constants, not mock data. The backend provides specialty/office data via `api.specialties.list()` / `api.offices.list()` when needed.
+
+### Quality Gates
+- `pnpm build` ✅ succeeds
+- `pnpm lint` ✅ 0 errors, 0 warnings
+
+### Files Modified (Session 8)
+- `src/services/api.js` — pure fetch client, `token()` helper, all endpoints point to real API
+- `src/pages/NewAppointment.jsx` — `mockApi` → `api`, specialties loaded from API
+- `src/pages/Availability.jsx` — `mockApi` → `api`, specialties loaded from API
+- `src/pages/Reports.jsx` — `mockApi` → `api`
+- `src/pages/Appointments.jsx` — `mockApi` → `api`
+- `src/pages/DoctorProfile.jsx` — constants import fix
+- `.env` — removed `VITE_USE_MOCK=true`
+
+### Files Deleted (Session 8)
+- `src/services/mockData.js`
+- `src/test/mockApi.test.js`
+
+### Next Tasks (see TASK_QUEUE.md)
+- [ ] Backend integration: connect to Spring Boot API (API client is ready, ensure backend is running at `VITE_API_URL`)
+- [ ] Patient profile page
+- [ ] Bulk appointment actions (cancel multiple, reschedule)
+- [ ] Email notifications system

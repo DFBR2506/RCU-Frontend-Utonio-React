@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, Users, AlertTriangle } from 'lucide-react';
-import { mockApi } from '../services/mockData';
+import { api } from '../services/api';
 import ErrorBoundary from '../components/UI/ErrorBoundary';
 import './Reports.css';
 
@@ -22,9 +22,9 @@ function ReportsInner() {
       if (!cancelled) setLoading(true);
     });
     const loaders = {
-      occupancy: mockApi.reports.occupancy,
-      productivity: mockApi.reports.productivity,
-      'no-shows': mockApi.reports.noShows,
+      occupancy: () => api.reports.occupancy(),
+      productivity: () => api.reports.productivity(),
+      'no-shows': () => api.reports.noShows(),
     };
     loaders[activeTab]().then(d => {
       if (cancelled) return;

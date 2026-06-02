@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { mockApi, SPECIALTIES } from '../services/mockData';
+import { api } from '../services/api';
 import TimeSlotGrid from '../components/UI/TimeSlotGrid';
 import './Availability.css';
 
@@ -9,6 +9,7 @@ export default function Availability() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [doctors, setDoctors] = useState([]);
+  const [specialties, setSpecialties] = useState([]);
   const [doctorId, setDoctorId] = useState(searchParams.get('doctorId') || '');
   const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0]);
   const [slots, setSlots] = useState([]);
@@ -17,10 +18,14 @@ export default function Availability() {
 
   useEffect(() => {
     async function load() {
-      const data = await mockApi.doctors.list();
-      setDoctors(data);
-      if (!doctorId && data.length > 0) {
-        setDoctorId(String(data[0].id));
+      const [docData, specData] = await Promise.all([
+        api.doctors.list(),
+        api.specialties.list(),
+      ]);
+      setDoctors(docData);
+      setSpecialties(specData);
+      if (!doctorId && docData.length > 0) {
+        setDoctorId(String(docData[0].id));
       }
     }
     load();
@@ -33,7 +38,7 @@ export default function Availability() {
       return;
     }
     Promise.resolve().then(() => setLoading(true));
-    mockApi.availability.get(parseInt(doctorId), date).then(s => {
+    api.availability.get(parseInt(doctorId), date).then(s => {
       setSlots(s);
       setLoading(false);
     });
@@ -66,7 +71,7 @@ export default function Availability() {
               onChange={(e) => setSpecialty(e.target.value)}
             >
               <option value="all">All Specialties</option>
-              {SPECIALTIES.map(s => (
+              {specialties.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

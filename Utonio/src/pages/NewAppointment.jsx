@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Check, FileSignature, RotateCcw } from 'lucide-react';
-import { mockApi, SPECIALTIES, APPOINTMENT_TYPES, OFFICES } from '../services/mockData';
+import { api } from '../services/api';
+import { APPOINTMENT_TYPES, OFFICES } from '../data/constants';
 import { useToast } from '../hooks/useToast';
 import useFormDraft, { draftAge } from '../hooks/useFormDraft';
 import TimeSlotGrid from '../components/UI/TimeSlotGrid';
@@ -37,6 +38,7 @@ export default function NewAppointment() {
   );
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [specialties, setSpecialties] = useState([]);
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -51,9 +53,14 @@ export default function NewAppointment() {
 
   useEffect(() => {
     async function load() {
-      const [pats, docs] = await Promise.all([mockApi.patients.list(), mockApi.doctors.list()]);
+      const [pats, docs, specs] = await Promise.all([
+        api.patients.list(),
+        api.doctors.list(),
+        api.specialties.list(),
+      ]);
       setPatients(pats);
       setDoctors(docs);
+      setSpecialties(specs);
       setLoading(false);
     }
     load();
@@ -61,7 +68,7 @@ export default function NewAppointment() {
 
   useEffect(() => {
     if (data.doctorId && data.date) {
-      mockApi.availability.get(parseInt(data.doctorId), data.date).then(setSlots);
+      api.availability.get(parseInt(data.doctorId), data.date).then(setSlots);
     } else {
       Promise.resolve().then(() => setSlots([]));
     }
@@ -69,7 +76,7 @@ export default function NewAppointment() {
 
   const doctorsBySpecialty = data.specialty
     ? doctors.filter(d => d.specialty === data.specialty && d.status === 'ACTIVE')
-    : doctors;
+    : doctors.filter(d => d.status === 'ACTIVE');
 
   function canAdvance() {
     if (step === 1) return !!data.patientId;
@@ -94,7 +101,7 @@ export default function NewAppointment() {
     setSubmitting(true);
     const apptType = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
     try {
-      await mockApi.appointments.create({
+      await api.appointments.create({
         patientId: parseInt(data.patientId),
         doctorId: parseInt(data.doctorId),
         officeId: parseInt(data.officeId),
@@ -118,7 +125,7 @@ export default function NewAppointment() {
   const doctor = doctors.find(d => d.id === parseInt(data.doctorId));
   const type = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
   const office = OFFICES.find(o => o.id === parseInt(data.officeId));
-  const specialty = SPECIALTIES.find(s => s.id === doctor?.specialty);
+  const specialty = specialties.find(s => s.id === doctor?.specialty);
 
   if (confirmed) {
     return (
@@ -236,7 +243,7 @@ export default function NewAppointment() {
               >
                 All
               </button>
-              {SPECIALTIES.map(sp => (
+              {specialties.map(sp => (
                 <button
                   key={sp.id}
                   className={`specialty-tab ${data.specialty === sp.id ? 'active' : ''}`}
@@ -249,7 +256,7 @@ export default function NewAppointment() {
             </div>
             <div className="doctor-list">
               {doctorsBySpecialty.map(d => {
-                const sp = SPECIALTIES.find(s => s.id === d.specialty);
+                const sp = specialties.find(s => s.id === d.specialty);
                 return (
                   <button
                     key={d.id}
