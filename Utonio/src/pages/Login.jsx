@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { LogIn, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
+import ShaderBackground from '../components/ShaderBackground';
+import utonioLogo from '../assets/utonio4.png';
 import './Login.css';
 
 const TEST_USERS = [
@@ -45,13 +47,11 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <ShaderBackground />
       <div className="login-card">
         <div className="login-brand">
           <div className="login-logo">
-            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
-              <rect width="44" height="44" rx="12" fill="var(--accent-lime)" fillOpacity="0.12" />
-              <path d="M22 11v22M11 22h22" stroke="var(--accent-lime)" strokeWidth="3" strokeLinecap="round" />
-            </svg>
+            <img src={utonioLogo} alt="Utonio Logo" width="44" height="44" />
           </div>
           <h1 className="login-title">Welcome to Utonio</h1>
           <p className="login-subtitle">Sign in to continue to the health center</p>

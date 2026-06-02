@@ -51,15 +51,10 @@
   gap: 8px;
 }
 
-.login-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: var(--accent-lime-dim);
-  margin-bottom: 4px;
+.login-logo img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
 }
 
 .login-title {

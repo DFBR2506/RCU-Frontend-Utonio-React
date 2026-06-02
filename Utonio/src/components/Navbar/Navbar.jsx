@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Sun, Moon, LogOut, User, Lock, Sliders, ChevronDown } from 'lucide-react';
+import { Sun, Moon, LogOut, User, Lock, Sliders, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth.js';
 import { useTheme } from '../../hooks/useTheme.js';
+import utonioLogo from '../../assets/utonio4.png';
 import './Navbar.css';
 
 function getInitials(name) {
@@ -47,7 +48,7 @@ export default function Navbar() {
         aria-label="Go to dashboard"
       >
         <span className="navbar-brand-icon">
-          <Plus size={18} strokeWidth={3} />
+          <img src={utonioLogo} alt="Utonio" width="18" height="18" />
         </span>
         <span className="navbar-brand-text">Utonio</span>
       </button>

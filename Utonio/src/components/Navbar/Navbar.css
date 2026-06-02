@@ -36,11 +36,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--accent-lime-dim);
-  color: var(--accent-lime);
+  width: 28px;
+  height: 28px;
+}
+
+.navbar-brand-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .navbar-brand-text {
