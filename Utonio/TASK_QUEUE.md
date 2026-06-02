@@ -100,5 +100,14 @@ Pick these up in order. Each is self-contained.
 
 ---
 
+### Completed (Session 8)
+- [x] **Mock removal** — deleted `mockData.js`, rewrote `api.js` as pure fetch client, removed `VITE_USE_MOCK` toggle
+- [x] **All pages migrated to real API** — NewAppointment, Availability, Reports, Appointments, DoctorProfile, ScheduleEditor, Doctors all use `api.*` exclusively
+- [x] **Doctors CRUD** — create/update doctors, add/edit/delete specialties, color picker, live preview badge
+
+### Completed (Session 9)
+- [x] **Frontend README rewrite** — comprehensive reference with features, env vars, architecture, hooks, wizard steps, components, tests, keyboard shortcuts, tech decisions
+- [x] **LaTeX WebCompleto.tex fix** — corrected package order (xcolor before hyperref), fixed tcolorbox `#1` double-use bug; PDF generated
+
 *Update this file as tasks are completed or new ones identified.*
 

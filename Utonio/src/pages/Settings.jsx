@@ -1,9 +1,13 @@
-import { useState } from 'react';
-import { Globe, Palette, Sun, Moon, Bell, User as UserIcon, Lock, AlertTriangle, Check, Eye, EyeOff, Save, Compass } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Globe, Palette, Sun, Moon, Bell, User as UserIcon, Lock, AlertTriangle, Check, Eye, EyeOff, Save, Compass, Building2, Stethoscope, Plus, Power, X } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
+import { getOffices, createOffice, updateOffice } from '../api/officesApi';
+import { getAppointmentTypes, createAppointmentType } from '../api/appointmentTypesApi';
 import CustomToggle from '../components/UI/CustomToggle';
+import FloatingField from '../components/UI/FloatingField';
+import SlideOver from '../components/UI/SlideOver';
 import ErrorBoundary from '../components/UI/ErrorBoundary';
 import './Settings.css';
 
@@ -39,6 +43,89 @@ function SettingsInner() {
   const { user } = useAuth();
   const toast = useToast();
   const { theme, setTheme, accent, setAccent, accentPresets, fontScale, setFontScale } = useTheme();
+
+  // ── Administration state ──────────────────────────────────────────────────
+  const [offices, setOffices] = useState([]);
+  const [apptTypes, setApptTypes] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(true);
+
+  const [officeSlideOpen, setOfficeSlideOpen] = useState(false);
+  const [officeForm, setOfficeForm] = useState({ code: '', floor: '' });
+  const [officeErrors, setOfficeErrors] = useState({});
+  const [savingOffice, setSavingOffice] = useState(false);
+
+  const [typeSlideOpen, setTypeSlideOpen] = useState(false);
+  const [typeForm, setTypeForm] = useState({ name: '', description: '', durationMinutes: '30' });
+  const [typeErrors, setTypeErrors] = useState({});
+  const [savingType, setSavingType] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getOffices(), getAppointmentTypes()])
+      .then(([offsData, typesData]) => {
+        setOffices(offsData.content || (Array.isArray(offsData) ? offsData : []));
+        setApptTypes(typesData.content || (Array.isArray(typesData) ? typesData : []));
+      })
+      .catch(() => toast.error('Could not load administration data'))
+      .finally(() => setAdminLoading(false));
+  }, []);
+
+  async function handleCreateOffice(e) {
+    e.preventDefault();
+    const errs = {};
+    if (!officeForm.code.trim()) errs.code = 'Required';
+    if (!officeForm.floor || isNaN(parseInt(officeForm.floor)) || parseInt(officeForm.floor) < 1) errs.floor = 'Must be a positive number';
+    setOfficeErrors(errs);
+    if (Object.keys(errs).length) return;
+    setSavingOffice(true);
+    try {
+      await createOffice({ code: officeForm.code.trim(), floor: parseInt(officeForm.floor) });
+      toast.success(`Office ${officeForm.code} created`);
+      const fresh = await getOffices();
+      setOffices(fresh.content || (Array.isArray(fresh) ? fresh : []));
+      setOfficeSlideOpen(false);
+      setOfficeForm({ code: '', floor: '' });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not create office');
+    } finally {
+      setSavingOffice(false);
+    }
+  }
+
+  async function toggleOffice(office) {
+    try {
+      await updateOffice(office.id, { active: !office.active });
+      setOffices(prev => prev.map(o => o.id === office.id ? { ...o, active: !o.active } : o));
+      toast.info(`Office ${office.code} marked as ${!office.active ? 'active' : 'inactive'}`);
+    } catch {
+      toast.error('Could not update office');
+    }
+  }
+
+  async function handleCreateType(e) {
+    e.preventDefault();
+    const errs = {};
+    if (!typeForm.name.trim()) errs.name = 'Required';
+    if (!typeForm.durationMinutes || isNaN(parseInt(typeForm.durationMinutes)) || parseInt(typeForm.durationMinutes) < 1) errs.durationMinutes = 'Must be a positive number';
+    setTypeErrors(errs);
+    if (Object.keys(errs).length) return;
+    setSavingType(true);
+    try {
+      await createAppointmentType({
+        name: typeForm.name.trim(),
+        description: typeForm.description.trim() || typeForm.name.trim(),
+        durationMinutes: typeForm.durationMinutes,
+      });
+      toast.success(`Appointment type "${typeForm.name}" created`);
+      const fresh = await getAppointmentTypes();
+      setApptTypes(fresh.content || (Array.isArray(fresh) ? fresh : []));
+      setTypeSlideOpen(false);
+      setTypeForm({ name: '', description: '', durationMinutes: '30' });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not create appointment type');
+    } finally {
+      setSavingType(false);
+    }
+  }
 
   const [language, setLanguage] = useState('en');
   const [dateFormat, setDateFormat] = useState('mdy');
@@ -335,6 +422,65 @@ function SettingsInner() {
           </div>
         </Section>
 
+        <Section icon={<Building2 size={16} />} title="Offices" subtitle="Register and manage physical consultation rooms (HU-03).">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button className="btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => { setOfficeForm({ code: '', floor: '' }); setOfficeErrors({}); setOfficeSlideOpen(true); }}>
+              <Plus size={14} /> Add Office
+            </button>
+          </div>
+          {adminLoading ? (
+            <div className="skeleton" style={{ height: '60px' }} />
+          ) : offices.length === 0 ? (
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No offices registered yet.</p>
+          ) : (
+            <div className="admin-list">
+              {offices.map(o => (
+                <div key={o.id} className="admin-list-item">
+                  <div>
+                    <span className="admin-item-name">{o.code}</span>
+                    <span className="admin-item-meta">Floor {o.floor}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span className={`admin-status-badge ${o.active ? 'active' : 'inactive'}`}>
+                      {o.active ? 'Active' : 'Inactive'}
+                    </span>
+                    <button className="row-action" onClick={() => toggleOffice(o)} title={o.active ? 'Deactivate' : 'Activate'}>
+                      <Power size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section icon={<Stethoscope size={16} />} title="Appointment Types" subtitle="Define consultation types with their duration in minutes (HU-04).">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button className="btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => { setTypeForm({ name: '', description: '', durationMinutes: '30' }); setTypeErrors({}); setTypeSlideOpen(true); }}>
+              <Plus size={14} /> Add Type
+            </button>
+          </div>
+          {adminLoading ? (
+            <div className="skeleton" style={{ height: '60px' }} />
+          ) : apptTypes.length === 0 ? (
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No appointment types registered yet.</p>
+          ) : (
+            <div className="admin-list">
+              {apptTypes.map(t => (
+                <div key={t.id} className="admin-list-item">
+                  <div>
+                    <span className="admin-item-name">{t.name}</span>
+                    <span className="admin-item-meta">{t.durationMinutes} min · {t.description}</span>
+                  </div>
+                  <span className={`admin-status-badge ${t.active ? 'active' : 'inactive'}`}>
+                    {t.active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
         <Section
           icon={<AlertTriangle size={16} />}
           title="Danger Zone"
@@ -381,6 +527,77 @@ function SettingsInner() {
           </div>
         </Section>
       </div>
+
+      <SlideOver isOpen={officeSlideOpen} onClose={() => setOfficeSlideOpen(false)} title="Add Office">
+        <form onSubmit={handleCreateOffice} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <FloatingField
+            id="office-code"
+            label="Office Code"
+            value={officeForm.code}
+            onChange={e => setOfficeForm({ ...officeForm, code: e.target.value })}
+            error={officeErrors.code}
+            required
+            placeholder="e.g. C-101"
+          />
+          <FloatingField
+            id="office-floor"
+            label="Floor"
+            type="number"
+            value={officeForm.floor}
+            onChange={e => setOfficeForm({ ...officeForm, floor: e.target.value })}
+            error={officeErrors.floor}
+            required
+            placeholder="e.g. 2"
+          />
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="submit" className="btn-primary" disabled={savingOffice} style={{ flex: 1 }}>
+              {savingOffice ? 'Saving...' : 'Create Office'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setOfficeSlideOpen(false)}>
+              <X size={16} /> Cancel
+            </button>
+          </div>
+        </form>
+      </SlideOver>
+
+      <SlideOver isOpen={typeSlideOpen} onClose={() => setTypeSlideOpen(false)} title="Add Appointment Type">
+        <form onSubmit={handleCreateType} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <FloatingField
+            id="type-name"
+            label="Name"
+            value={typeForm.name}
+            onChange={e => setTypeForm({ ...typeForm, name: e.target.value })}
+            error={typeErrors.name}
+            required
+            placeholder="e.g. General Consultation"
+          />
+          <FloatingField
+            id="type-description"
+            label="Description"
+            value={typeForm.description}
+            onChange={e => setTypeForm({ ...typeForm, description: e.target.value })}
+            placeholder="Optional description"
+          />
+          <FloatingField
+            id="type-duration"
+            label="Duration (minutes)"
+            type="number"
+            value={typeForm.durationMinutes}
+            onChange={e => setTypeForm({ ...typeForm, durationMinutes: e.target.value })}
+            error={typeErrors.durationMinutes}
+            required
+            placeholder="e.g. 30"
+          />
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="submit" className="btn-primary" disabled={savingType} style={{ flex: 1 }}>
+              {savingType ? 'Saving...' : 'Create Type'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setTypeSlideOpen(false)}>
+              <X size={16} /> Cancel
+            </button>
+          </div>
+        </form>
+      </SlideOver>
     </div>
   );
 }

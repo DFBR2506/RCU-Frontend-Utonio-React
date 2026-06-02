@@ -1,195 +1,147 @@
-import { useState, useEffect, useMemo } from 'react';
-import { X, Save, RotateCcw, AlertTriangle, CalendarOff } from 'lucide-react';
-import { getAppointments } from '../../api/appointmentsApi';
+import { useState, useEffect } from 'react';
+import { Save, Clock } from 'lucide-react';
+import { getDoctorSchedules, createDoctorSchedule } from '../../api/doctorSchedulesApi';
 import { useToast } from '../../hooks/useToast';
 import SlideOver from './SlideOver';
-import { findScheduleConflicts } from '../../utils/scheduleConflicts';
 import './ScheduleEditor.css';
 
 const DAYS = [
-  { id: 1, short: 'Mon', long: 'Monday' },
-  { id: 2, short: 'Tue', long: 'Tuesday' },
-  { id: 3, short: 'Wed', long: 'Wednesday' },
-  { id: 4, short: 'Thu', long: 'Thursday' },
-  { id: 5, short: 'Fri', long: 'Friday' },
-  { id: 6, short: 'Sat', long: 'Saturday' },
-  { id: 0, short: 'Sun', long: 'Sunday' },
+  { dow: 'MONDAY',    short: 'Mon', long: 'Monday' },
+  { dow: 'TUESDAY',   short: 'Tue', long: 'Tuesday' },
+  { dow: 'WEDNESDAY', short: 'Wed', long: 'Wednesday' },
+  { dow: 'THURSDAY',  short: 'Thu', long: 'Thursday' },
+  { dow: 'FRIDAY',    short: 'Fri', long: 'Friday' },
+  { dow: 'SATURDAY',  short: 'Sat', long: 'Saturday' },
+  { dow: 'SUNDAY',    short: 'Sun', long: 'Sunday' },
 ];
 
-const FULL_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-
-function buildEmptySchedule() {
-  const schedule = {};
-  for (let d = 0; d < 7; d++) schedule[d] = [];
-  return schedule;
+function buildEmptyDayForm() {
+  return { enabled: false, startTime: '08:00', endTime: '17:00' };
 }
-
-
-
-
 
 export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
   const toast = useToast();
-  const [schedule, setSchedule] = useState(buildEmptySchedule());
-  const [initialSchedule, setInitialSchedule] = useState(buildEmptySchedule());
-  const [appointments, setAppointments] = useState([]);
+  const [activeDay, setActiveDay] = useState('MONDAY');
+  const [existing, setExisting] = useState({});
+  const [form, setForm] = useState(() =>
+    Object.fromEntries(DAYS.map(d => [d.dow, buildEmptyDayForm()]))
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeDay, setActiveDay] = useState(1);
-  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !doctor) return;
-    let cancelled = false;
-    Promise.resolve().then(() => setLoading(true));
-    getAppointments({ doctorId: doctor.id }, 0, 100)
-      .then(apptsData => {
-        if (cancelled) return;
-        setAppointments((apptsData.content || apptsData).filter(a => a.doctorId === doctor.id));
-        setSchedule(buildEmptySchedule());
-        setInitialSchedule(buildEmptySchedule());
-        setLoading(false);
+    setLoading(true);
+    getDoctorSchedules(doctor.id)
+      .then(schedules => {
+        const map = {};
+        schedules.forEach(s => { map[s.dayOfWeek] = s; });
+        setExisting(map);
+        setForm(Object.fromEntries(
+          DAYS.map(d => [
+            d.dow,
+            map[d.dow]
+              ? { enabled: true, startTime: map[d.dow].startTime, endTime: map[d.dow].endTime }
+              : buildEmptyDayForm(),
+          ])
+        ));
       })
-      .catch(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-    return () => { cancelled = true; };
+      .catch(() => toast.error('Could not load schedules'))
+      .finally(() => setLoading(false));
   }, [isOpen, doctor]);
-
-  const isDirty = JSON.stringify(schedule) !== JSON.stringify(initialSchedule);
-
-  const conflicts = useMemo(
-    () => (doctor ? findScheduleConflicts(appointments, doctor.id, schedule) : []),
-    [appointments, doctor, schedule]
-  );
-
-  const conflictsByDay = useMemo(() => {
-    const map = {};
-    for (const c of conflicts) {
-      map[c.day] = (map[c.day] || 0) + 1;
-    }
-    return map;
-  }, [conflicts]);
 
   if (!doctor) return null;
 
-  function toggleSlot(dayId, time) {
-    setSchedule((prev) => {
-      const daySlots = prev[dayId] || [];
-      const existing = daySlots.find(s => s.time === time);
-      const nextDay = existing
-        ? daySlots.map(s => s.time === time ? { ...s, available: !s.available } : s)
-        : [...daySlots, { time, available: true }].sort((a, b) => a.time.localeCompare(b.time));
-      return { ...prev, [dayId]: nextDay };
-    });
+  const doctorName = `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim();
+
+  function setDayField(dow, field, value) {
+    setForm(prev => ({ ...prev, [dow]: { ...prev[dow], [field]: value } }));
   }
 
-  function removeSlot(dayId, time) {
-    setSchedule((prev) => ({
-      ...prev,
-      [dayId]: (prev[dayId] || []).filter(s => s.time !== time),
-    }));
-  }
-
-  function reset() {
-    setSchedule(JSON.parse(JSON.stringify(initialSchedule)));
-  }
-
-  async function performSave() {
+  async function save() {
     setSaving(true);
-    try {
-      toast.success(`Schedule saved for ${doctor.fullName || doctor.name}`);
-      setInitialSchedule(JSON.parse(JSON.stringify(schedule)));
-      if (onSaved) onSaved(doctor.id, schedule);
-    } catch {
-      toast.error('Could not save schedule');
-    } finally {
-      setSaving(false);
-      setConfirming(false);
-    }
-  }
+    const toCreate = DAYS.filter(d =>
+      form[d.dow].enabled && !existing[d.dow]
+    );
 
-  function save() {
-    if (conflicts.length > 0) {
-      setConfirming(true);
+    if (toCreate.length === 0) {
+      toast.info('No new days to save — existing schedules cannot be modified here.');
+      setSaving(false);
       return;
     }
-    performSave();
-  }
 
-  function handleClose() {
-    if (isDirty) {
-      if (confirm('You have unsaved changes. Discard them?')) onClose();
-    } else {
-      onClose();
+    let saved = 0;
+    let failed = 0;
+    for (const d of toCreate) {
+      const { startTime, endTime } = form[d.dow];
+      if (startTime >= endTime) {
+        toast.error(`${d.long}: end time must be after start time`);
+        failed++;
+        continue;
+      }
+      try {
+        await createDoctorSchedule(doctor.id, {
+          dayOfWeek: d.dow,
+          startTime,
+          endTime,
+        });
+        saved++;
+      } catch (err) {
+        toast.error(err?.response?.data?.message || `Could not save ${d.long}`);
+        failed++;
+      }
+    }
+
+    setSaving(false);
+    if (saved > 0) {
+      toast.success(`${saved} day${saved !== 1 ? 's' : ''} saved for ${doctorName}`);
+      // Reload existing schedules
+      getDoctorSchedules(doctor.id).then(schedules => {
+        const map = {};
+        schedules.forEach(s => { map[s.dayOfWeek] = s; });
+        setExisting(map);
+      });
+      if (onSaved) onSaved(doctor.id);
     }
   }
 
-  const dayName = (dayId) => DAYS.find(d => d.id === dayId)?.long;
+  const currentDay = DAYS.find(d => d.dow === activeDay);
+  const currentForm = form[activeDay] || buildEmptyDayForm();
+  const isExisting = !!existing[activeDay];
+  const hasNewDays = DAYS.some(d => form[d.dow].enabled && !existing[d.dow]);
 
   return (
     <SlideOver
       isOpen={isOpen}
-      onClose={handleClose}
-      title={`${doctor.fullName || doctor.name} — Weekly Schedule`}
-      width={620}
+      onClose={onClose}
+      title={`${doctorName} — Weekly Schedule`}
+      width={560}
     >
       {loading ? (
         <div style={{ padding: '40px' }}>
-          <div className="skeleton" style={{ height: '24px', width: '60%', marginBottom: '24px' }} />
-          <div className="skeleton" style={{ height: '120px', marginBottom: '16px' }} />
-          <div className="skeleton" style={{ height: '120px' }} />
+          {[1, 2, 3].map(i => (
+            <div key={i} className="skeleton" style={{ height: '48px', marginBottom: '12px' }} />
+          ))}
         </div>
       ) : (
         <div className="schedule-editor">
           <p className="schedule-help">
-            Toggle a time to mark it available, or add a custom slot. Click the
-            <span className="legend-x"> X </span>
-            to remove a slot.
+            Configure working hours per day. Days marked in green already have a schedule saved.
           </p>
-
-          {conflicts.length > 0 ? (
-            <div className="schedule-conflict-banner" role="alert">
-              <div className="conflict-header">
-                <AlertTriangle size={16} />
-                <strong>
-                  {conflicts.length} appointment conflict{conflicts.length !== 1 ? 's' : ''}
-                </strong>
-              </div>
-              <ul className="conflict-list">
-                {conflicts.slice(0, 5).map((c) => (
-                  <li key={c.appointment.id}>
-                    {c.appointment.date} at {c.time} <span className="conflict-reason">— {c.reason}</span>
-                  </li>
-                ))}
-                {conflicts.length > 5 ? (
-                  <li className="conflict-overflow">…and {conflicts.length - 5} more</li>
-                ) : null}
-              </ul>
-              <p className="conflict-hint">
-                Saving will mark these appointments as <strong>need rescheduling</strong>. You can also adjust the schedule to remove conflicts.
-              </p>
-            </div>
-          ) : null}
 
           <div className="schedule-day-tabs">
             {DAYS.map(d => {
-              const count = (schedule[d.id] || []).length;
-              const conflictCount = conflictsByDay[d.id] || 0;
+              const isConf = !!existing[d.dow];
+              const isNew = form[d.dow].enabled && !existing[d.dow];
               return (
                 <button
-                  key={d.id}
-                  className={`schedule-day-tab ${activeDay === d.id ? 'active' : ''} ${count === 0 ? 'empty' : ''} ${conflictCount > 0 ? 'has-conflict' : ''}`}
-                  onClick={() => setActiveDay(d.id)}
+                  key={d.dow}
+                  className={`schedule-day-tab ${activeDay === d.dow ? 'active' : ''} ${!form[d.dow].enabled ? 'empty' : ''}`}
+                  onClick={() => setActiveDay(d.dow)}
+                  style={isConf ? { borderColor: 'var(--accent-green)', color: 'var(--accent-green)' } : isNew ? { borderColor: 'var(--accent-lime)', color: 'var(--accent-lime)' } : {}}
                 >
                   <span className="day-short">{d.short}</span>
-                  <span className="day-count">{count}</span>
-                  {conflictCount > 0 ? (
-                    <span className="day-conflict-badge" title={`${conflictCount} conflict${conflictCount !== 1 ? 's' : ''}`}>
-                      {conflictCount}
-                    </span>
-                  ) : null}
+                  <span className="day-count">{isConf ? '✓' : isNew ? '+' : '—'}</span>
                 </button>
               );
             })}
@@ -197,80 +149,71 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
 
           <div className="schedule-day-content">
             <div className="schedule-day-header">
-              <h4>{dayName(activeDay)}</h4>
-              <span className="schedule-day-meta">
-                {(schedule[activeDay] || []).length} slot{(schedule[activeDay] || []).length !== 1 ? 's' : ''}
-                {conflictsByDay[activeDay] ? (
-                  <span className="day-conflict-count">
-                    <CalendarOff size={11} />
-                    {conflictsByDay[activeDay]} conflict{conflictsByDay[activeDay] !== 1 ? 's' : ''}
+              <h4>{currentDay?.long}</h4>
+              {isExisting && (
+                <span style={{ fontSize: '12px', color: 'var(--accent-green)', fontWeight: 600 }}>
+                  Already configured
+                </span>
+              )}
+            </div>
+
+            {isExisting ? (
+              <div className="schedule-existing-info">
+                <div className="schedule-time-row">
+                  <Clock size={14} color="var(--accent-green)" />
+                  <span>
+                    {existing[activeDay].startTime} — {existing[activeDay].endTime}
                   </span>
-                ) : null}
-              </span>
-            </div>
-
-            <div className="schedule-slots-grid">
-              {FULL_HOURS.map(h => {
-                const time = `${String(h).padStart(2, '0')}:00`;
-                const halfTime = `${String(h).padStart(2, '0')}:30`;
-                const slot = (schedule[activeDay] || []).find(s => s.time === time);
-                const halfSlot = (schedule[activeDay] || []).find(s => s.time === halfTime);
-                return (
-                  <div key={h} className="schedule-hour-row">
-                    <div className="hour-label">{time}</div>
-                    <button
-                      className={`schedule-slot ${slot?.available ? 'active' : ''} ${slot ? 'filled' : ''}`}
-                      onClick={() => toggleSlot(activeDay, time)}
-                    >
-                      {slot ? (slot.available ? 'Available' : 'Booked') : '+ Add'}
-                    </button>
-                    <button
-                      className={`schedule-slot ${halfSlot?.available ? 'active' : ''} ${halfSlot ? 'filled' : ''}`}
-                      onClick={() => toggleSlot(activeDay, halfTime)}
-                    >
-                      {halfSlot ? (halfSlot.available ? 'Available' : 'Booked') : '+ Add'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {(schedule[activeDay] || []).length > 0 && (
-              <div className="schedule-slot-list">
-                <div className="slot-list-label">Configured slots</div>
-                <div className="slot-chips">
-                  {(schedule[activeDay] || []).map(s => (
-                    <span
-                      key={s.time}
-                      className={`slot-chip ${s.available ? 'available' : 'booked'}`}
-                    >
-                      {s.time}
-                      <button
-                        onClick={() => removeSlot(activeDay, s.time)}
-                        aria-label={`Remove ${s.time}`}
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
                 </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                  Schedule already exists. Contact an administrator to modify it.
+                </p>
+              </div>
+            ) : (
+              <div className="schedule-form-day">
+                <label className="schedule-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={currentForm.enabled}
+                    onChange={e => setDayField(activeDay, 'enabled', e.target.checked)}
+                  />
+                  <span>Enable this day</span>
+                </label>
+
+                {currentForm.enabled && (
+                  <div className="schedule-time-inputs">
+                    <div className="form-group">
+                      <label className="form-label">Start time</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={currentForm.startTime}
+                        onChange={e => setDayField(activeDay, 'startTime', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">End time</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={currentForm.endTime}
+                        onChange={e => setDayField(activeDay, 'endTime', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           <div className="schedule-footer">
-            <button
-              className="btn-secondary"
-              onClick={reset}
-              disabled={!isDirty || saving}
-            >
-              <RotateCcw size={14} />
-              Reset
+            <button className="btn-secondary" onClick={onClose}>
+              Cancel
             </button>
             <button
               className="btn-primary"
               onClick={save}
-              disabled={!isDirty || saving}
+              disabled={saving || !hasNewDays}
             >
               <Save size={14} />
               {saving ? 'Saving...' : 'Save Schedule'}
@@ -278,28 +221,6 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
           </div>
         </div>
       )}
-
-      {confirming ? (
-        <div className="conflict-confirm-overlay" onClick={() => setConfirming(false)}>
-          <div className="conflict-confirm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="conflict-confirm-title">
-              <AlertTriangle size={18} />
-              Save with {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''}?
-            </h3>
-            <p className="conflict-confirm-body">
-              {conflicts.length} future appointment{conflicts.length !== 1 ? 's are' : ' is'} outside the new schedule. Patients will need to be rescheduled. Continue?
-            </p>
-            <div className="conflict-confirm-actions">
-              <button className="btn-secondary" onClick={() => setConfirming(false)}>
-                Adjust schedule
-              </button>
-              <button className="btn-danger" onClick={performSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save anyway'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </SlideOver>
   );
 }

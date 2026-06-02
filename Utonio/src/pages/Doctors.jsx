@@ -9,7 +9,9 @@ import SlideOver from '../components/UI/SlideOver';
 import FloatingField from '../components/UI/FloatingField';
 import './Doctors.css';
 
-const EMPTY_DOCTOR_FORM = { fullName: '', specialtyId: '', email: '', licenseNumber: '', documentNumber: '' };
+const DOCUMENT_TYPES = ['CC', 'TI', 'CE', 'PASSPORT'];
+const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
+const EMPTY_DOCTOR_FORM = { firstName: '', lastName: '', email: '', phone: '', documentType: 'CC', documentNumber: '', gender: 'MALE', licenseNumber: '', specialtyId: '' };
 const EMPTY_SPECIALTY_FORM = { name: '', description: '' };
 
 export default function Doctors() {
@@ -51,8 +53,8 @@ export default function Doctors() {
     }
   }
 
-  const filtered = filter === 'all' ? doctors : doctors.filter(d => d.specialtyId === parseInt(filter) || d.specialty === filter);
-  const activeCount = doctors.filter(d => d.status === 'ACTIVE').length;
+  const filtered = filter === 'all' ? doctors : doctors.filter(d => d.specialtyId === filter);
+  const activeCount = doctors.filter(d => d.active === true).length;
 
   function getSpecialtyColor(id) {
     const sp = specialties.find(s => s.id === id);
@@ -78,11 +80,15 @@ export default function Doctors() {
   function openDoctorEdit(doctor) {
     setEditingDoctor(doctor);
     setDoctorForm({
-      fullName: doctor.fullName || '',
-      specialtyId: doctor.specialtyId || doctor.specialty || '',
+      firstName: doctor.firstName || '',
+      lastName: doctor.lastName || '',
       email: doctor.email || '',
-      licenseNumber: doctor.licenseNumber || '',
+      phone: doctor.phone || '',
+      documentType: doctor.documentType || 'CC',
       documentNumber: doctor.documentNumber || '',
+      gender: doctor.gender || 'MALE',
+      licenseNumber: doctor.licenseNumber || '',
+      specialtyId: doctor.specialtyId || '',
     });
     setDoctorErrors({});
     setDoctorSlideOpen(true);
@@ -109,10 +115,14 @@ export default function Doctors() {
 
   function validateDoctor() {
     const e = {};
-    if (!doctorForm.fullName.trim()) e.fullName = 'Required';
-    if (!doctorForm.specialtyId) e.specialtyId = 'Required';
+    if (!doctorForm.firstName.trim()) e.firstName = 'Required';
+    if (!doctorForm.lastName.trim()) e.lastName = 'Required';
     if (!doctorForm.email.trim()) e.email = 'Required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(doctorForm.email)) e.email = 'Invalid email';
+    if (!doctorForm.phone.trim()) e.phone = 'Required';
+    if (!doctorForm.documentNumber.trim()) e.documentNumber = 'Required';
+    if (!doctorForm.licenseNumber.trim()) e.licenseNumber = 'Required';
+    if (!doctorForm.specialtyId) e.specialtyId = 'Required';
     setDoctorErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -131,10 +141,10 @@ export default function Doctors() {
     try {
       if (editingDoctor) {
         await updateDoctor(editingDoctor.id, doctorForm);
-        toast.success(`${doctorForm.fullName} updated successfully`);
+        toast.success(`${doctorForm.firstName} ${doctorForm.lastName} updated successfully`);
       } else {
         await createDoctor(doctorForm);
-        toast.success(`${doctorForm.fullName} added successfully`);
+        toast.success(`${doctorForm.firstName} ${doctorForm.lastName} added successfully`);
       }
       await load();
       closeDoctorSlide();
@@ -164,13 +174,13 @@ export default function Doctors() {
   }
 
   async function toggleDoctorStatus(doctor) {
-    const newStatus = doctor.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const name = doctor.fullName || doctor.name;
-    if (confirm(`${newStatus === 'ACTIVE' ? 'Activate' : 'Deactivate'} ${name}?`)) {
+    const newActive = !doctor.active;
+    const name = `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim();
+    if (confirm(`${newActive ? 'Activate' : 'Deactivate'} ${name}?`)) {
       try {
-        await updateDoctor(doctor.id, { status: newStatus });
+        await updateDoctor(doctor.id, { active: newActive });
         await load();
-        toast.info(`${name} marked as ${newStatus.toLowerCase()}`);
+        toast.info(`${name} marked as ${newActive ? 'active' : 'inactive'}`);
       } catch {
         toast.error('Could not update status');
       }
@@ -227,8 +237,8 @@ export default function Doctors() {
 
       <div className="doctors-grid">
         {filtered.map((doc, i) => {
-          const color = getSpecialtyColor(doc.specialtyId || doc.specialty);
-          const name = doc.fullName || doc.name || 'Doctor';
+          const color = getSpecialtyColor(doc.specialtyId);
+          const name = `${doc.firstName || ''} ${doc.lastName || ''}`.trim() || 'Doctor';
           return (
             <div
               key={doc.id}
@@ -258,8 +268,8 @@ export default function Doctors() {
                 >
                   {getInitials(name)}
                 </div>
-                <div className={`doctor-status ${doc.status === 'ACTIVE' ? 'active' : 'inactive'}`}>
-                  {doc.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                <div className={`doctor-status ${doc.active ? 'active' : 'inactive'}`}>
+                  {doc.active ? 'Active' : 'Inactive'}
                 </div>
               </div>
 
@@ -306,8 +316,8 @@ export default function Doctors() {
                     e.stopPropagation();
                     setEditingDoctor(doc);
                   }}
-                  disabled={doc.status === 'INACTIVE'}
-                  title={doc.status === 'INACTIVE' ? 'Inactive doctor' : 'Edit weekly schedule'}
+                  disabled={!doc.active}
+                  title={!doc.active ? 'Inactive doctor' : 'Edit weekly schedule'}
                 >
                   <Calendar size={14} />
                   Schedule
@@ -332,9 +342,9 @@ export default function Doctors() {
                     e.stopPropagation();
                     toggleDoctorStatus(doc);
                   }}
-                  title={doc.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                  title={doc.active ? 'Deactivate' : 'Activate'}
                 >
-                  {doc.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                  {doc.active ? 'Deactivate' : 'Activate'}
                 </button>
               </div>
             </div>
@@ -348,16 +358,26 @@ export default function Doctors() {
         title={editingDoctor ? 'Edit Doctor' : 'Add Doctor'}
       >
         <form onSubmit={handleDoctorSubmit} className="doctor-form">
-          <FloatingField
-            id="doctor-name"
-            label="Full Name"
-            value={doctorForm.fullName}
-            onChange={(e) => setDoctorForm({ ...doctorForm, fullName: e.target.value })}
-            error={doctorErrors.fullName}
-            required
-            autoComplete="name"
-            placeholder="e.g. Dr. Sarah Chen"
-          />
+          <div className="floating-row">
+            <FloatingField
+              id="doctor-firstname"
+              label="First Name"
+              value={doctorForm.firstName}
+              onChange={(e) => setDoctorForm({ ...doctorForm, firstName: e.target.value })}
+              error={doctorErrors.firstName}
+              required
+              autoComplete="given-name"
+            />
+            <FloatingField
+              id="doctor-lastname"
+              label="Last Name"
+              value={doctorForm.lastName}
+              onChange={(e) => setDoctorForm({ ...doctorForm, lastName: e.target.value })}
+              error={doctorErrors.lastName}
+              required
+              autoComplete="family-name"
+            />
+          </div>
 
           <div className="floating-field-group">
             <label htmlFor="doctor-specialty" className="floating-select-label">
@@ -391,24 +411,64 @@ export default function Doctors() {
             inputMode="email"
           />
 
-          {!editingDoctor && (
-            <>
-              <FloatingField
-                id="doctor-license"
-                label="License Number"
-                value={doctorForm.licenseNumber}
-                onChange={(e) => setDoctorForm({ ...doctorForm, licenseNumber: e.target.value })}
-                required
-              />
-              <FloatingField
-                id="doctor-document"
-                label="Document Number"
-                value={doctorForm.documentNumber}
-                onChange={(e) => setDoctorForm({ ...doctorForm, documentNumber: e.target.value })}
-                required
-              />
-            </>
-          )}
+          <FloatingField
+            id="doctor-phone"
+            label="Phone"
+            type="tel"
+            value={doctorForm.phone}
+            onChange={(e) => setDoctorForm({ ...doctorForm, phone: e.target.value })}
+            error={doctorErrors.phone}
+            required
+            autoComplete="tel"
+            inputMode="tel"
+          />
+
+          <div className="floating-row">
+            <div className="floating-field-group">
+              <label htmlFor="doctor-doctype" className="floating-select-label">
+                Doc Type <span className="floating-required" aria-hidden="true"> *</span>
+              </label>
+              <select
+                id="doctor-doctype"
+                className="floating-select"
+                value={doctorForm.documentType}
+                onChange={(e) => setDoctorForm({ ...doctorForm, documentType: e.target.value })}
+              >
+                {DOCUMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="floating-field-group">
+              <label htmlFor="doctor-gender" className="floating-select-label">
+                Gender <span className="floating-required" aria-hidden="true"> *</span>
+              </label>
+              <select
+                id="doctor-gender"
+                className="floating-select"
+                value={doctorForm.gender}
+                onChange={(e) => setDoctorForm({ ...doctorForm, gender: e.target.value })}
+              >
+                {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <FloatingField
+            id="doctor-document"
+            label="Document Number"
+            value={doctorForm.documentNumber}
+            onChange={(e) => setDoctorForm({ ...doctorForm, documentNumber: e.target.value })}
+            error={doctorErrors.documentNumber}
+            required
+          />
+
+          <FloatingField
+            id="doctor-license"
+            label="License Number"
+            value={doctorForm.licenseNumber}
+            onChange={(e) => setDoctorForm({ ...doctorForm, licenseNumber: e.target.value })}
+            error={doctorErrors.licenseNumber}
+            required
+          />
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
             <button type="submit" className="btn-primary" disabled={submittingDoctor} style={{ flex: 1 }}>

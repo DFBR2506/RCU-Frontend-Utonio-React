@@ -88,7 +88,7 @@ export default function Dashboard() {
 
   const getDoctorName = (id) => {
     const d = doctors.find(d => d.id === id);
-    return d ? (d.fullName || d.name || 'Doctor') : 'Doctor';
+    return d ? `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Doctor' : 'Doctor';
   };
 
   const recentAppts = [...appointments]

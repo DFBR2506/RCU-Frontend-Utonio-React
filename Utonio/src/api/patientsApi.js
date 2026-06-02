@@ -19,10 +19,14 @@ export async function createPatient(patientData) {
 
 export async function updatePatient(id, patientData) {
   const payload = {};
-  if (patientData.fullName !== undefined) payload.fullName = patientData.fullName;
+  if (patientData.firstName !== undefined) payload.firstName = patientData.firstName;
+  if (patientData.lastName !== undefined) payload.lastName = patientData.lastName;
   if (patientData.email !== undefined) payload.email = patientData.email;
-  if (patientData.phoneNumber !== undefined) payload.phoneNumber = patientData.phoneNumber;
-  if (patientData.status !== undefined) payload.status = patientData.status;
+  if (patientData.phone !== undefined) payload.phone = patientData.phone;
+  if (patientData.documentType !== undefined) payload.documentType = patientData.documentType;
+  if (patientData.documentNumber !== undefined) payload.documentNumber = patientData.documentNumber;
+  if (patientData.gender !== undefined) payload.gender = patientData.gender;
+  if (patientData.active !== undefined) payload.active = patientData.active;
   const response = await api.patch(`/api/patients/${id}`, payload);
   return response.data;
 }

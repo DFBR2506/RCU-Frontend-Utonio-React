@@ -3,13 +3,14 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { getDoctors } from '../api/doctorsApi';
 import { getSpecialties } from '../api/specialtiesApi';
+import { getOffices } from '../api/officesApi';
 import { getAvailableSlots } from '../api/availabilityApi';
 import TimeSlotGrid from '../components/UI/TimeSlotGrid';
 import './Availability.css';
 
 function parseSlots(slots) {
   return slots.map(s => ({
-    time: (s.slotStart || s.time || '').substring(0, 5),
+    time: (s.startAt || '').substring(11, 16),
     available: true,
   }));
 }
@@ -19,7 +20,9 @@ export default function Availability() {
   const navigate = useNavigate();
   const [doctors, setDoctors] = useState([]);
   const [specialties, setSpecialties] = useState([]);
+  const [offices, setOffices] = useState([]);
   const [doctorId, setDoctorId] = useState(searchParams.get('doctorId') || '');
+  const [officeId, setOfficeId] = useState('');
   const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0]);
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -27,25 +30,28 @@ export default function Availability() {
 
   useEffect(() => {
     async function load() {
-      const [docData, specData] = await Promise.all([
+      const [docData, specData, offsData] = await Promise.all([
         getDoctors(0, 100),
         getSpecialties(),
+        getOffices(),
       ]);
-      setDoctors(docData.content || docData);
+      const docs = docData.content || docData;
+      const offs = offsData.content || (Array.isArray(offsData) ? offsData : []);
+      setDoctors(docs);
       setSpecialties(specData.content || specData || []);
-      if (!doctorId && (docData.content || docData).length > 0) {
-        setDoctorId(String((docData.content || docData)[0].id));
-      }
+      setOffices(offs);
+      if (!doctorId && docs.length > 0) setDoctorId(String(docs[0].id));
+      if (offs.length > 0) setOfficeId(String(offs[0].id));
     }
     load();
   }, []);
 
   useEffect(() => {
-    if (!doctorId || !date) return;
+    if (!doctorId || !officeId || !date) return;
     async function fetchSlots() {
       setLoading(true);
       try {
-        const s = await getAvailableSlots(parseInt(doctorId), date);
+        const s = await getAvailableSlots(doctorId, officeId, date);
         setSlots(parseSlots(s));
       } catch {
         setSlots([]);
@@ -54,11 +60,11 @@ export default function Availability() {
       }
     }
     fetchSlots();
-  }, [doctorId, date]);
+  }, [doctorId, officeId, date]);
 
   const filteredDoctors = specialty === 'all'
     ? doctors
-    : doctors.filter(d => (d.specialtyId || d.specialty) === parseInt(specialty));
+    : doctors.filter(d => d.specialtyId === specialty);
 
   function handleSlotSelect(time) {
     if (!doctorId || !date) return;
@@ -98,7 +104,25 @@ export default function Availability() {
               onChange={(e) => setDoctorId(e.target.value)}
             >
               {filteredDoctors.map(d => (
-                <option key={d.id} value={d.id}>{d.fullName || d.name}</option>
+                <option key={d.id} value={d.id}>
+                  {`${d.firstName || ''} ${d.lastName || ''}`.trim()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="office">Office</label>
+            <select
+              id="office"
+              className="form-input"
+              value={officeId}
+              onChange={(e) => setOfficeId(e.target.value)}
+            >
+              {offices.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.code} — Floor {o.floor}
+                </option>
               ))}
             </select>
           </div>
@@ -120,7 +144,11 @@ export default function Availability() {
           <p className="result-meta">
             {loading ? 'Loading slots...' : `${slots.filter(s => s.available).length} slots available`}
           </p>
-          {loading ? (
+          {!officeId ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '20px' }}>
+              Select an office to see available slots.
+            </p>
+          ) : loading ? (
             <div className="time-slot-grid" style={{ marginTop: '20px' }}>
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="skeleton" style={{ height: '46px' }} />
@@ -128,7 +156,7 @@ export default function Availability() {
             </div>
           ) : (
             <div style={{ marginTop: '20px' }}>
-              <TimeSlotGrid slots={slots} onSelect={handleSlotSelect} stagger={true} gridKey={`${doctorId}-${date}`} />
+              <TimeSlotGrid slots={slots} onSelect={handleSlotSelect} stagger={true} gridKey={`${doctorId}-${officeId}-${date}`} />
             </div>
           )}
         </div>

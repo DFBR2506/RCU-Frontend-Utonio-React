@@ -16,9 +16,9 @@ import './NewAppointment.css';
 const STEPS = [
   { id: 1, label: 'Patient' },
   { id: 2, label: 'Doctor' },
-  { id: 3, label: 'Date & Time' },
-  { id: 4, label: 'Type' },
-  { id: 5, label: 'Office' },
+  { id: 3, label: 'Office' },
+  { id: 4, label: 'Date & Time' },
+  { id: 5, label: 'Type' },
   { id: 6, label: 'Review' },
 ];
 
@@ -34,7 +34,7 @@ const initialAppointment = (searchParams) => ({
 
 function parseSlots(slots) {
   return slots.map(s => ({
-    time: (s.slotStart || s.time || '').substring(0, 5),
+    time: (s.startAt || '').substring(11, 16),
     available: true,
   }));
 }
@@ -75,33 +75,31 @@ export default function NewAppointment() {
       ]);
       setPatients(pats.content || pats);
       setDoctors(docs.content || docs);
-      setSpecialties(specs);
-      setAppointmentTypes(types);
-      setOffices(Array.isArray(offs) ? offs : []);
+      setSpecialties(specs.content || specs);
+      setAppointmentTypes(types.content || types);
+      setOffices(offs.content || (Array.isArray(offs) ? offs : []));
       setLoading(false);
     }
     load();
   }, []);
 
   useEffect(() => {
-    if (!data.doctorId || !data.date) {
-      return;
-    }
-    getAvailableSlots(parseInt(data.doctorId), data.date)
+    if (!data.doctorId || !data.officeId || !data.date) return;
+    getAvailableSlots(data.doctorId, data.officeId, data.date)
       .then(s => setSlots(parseSlots(s)))
       .catch(() => setSlots([]));
-  }, [data.doctorId, data.date]);
+  }, [data.doctorId, data.officeId, data.date]);
 
   const doctorsBySpecialty = data.specialtyId
-    ? doctors.filter(d => (d.specialtyId || d.specialty) === parseInt(data.specialtyId) && d.status === 'ACTIVE')
-    : doctors.filter(d => d.status === 'ACTIVE');
+    ? doctors.filter(d => d.specialtyId === data.specialtyId && d.active === true)
+    : doctors.filter(d => d.active === true);
 
   function canAdvance() {
     if (step === 1) return !!data.patientId;
     if (step === 2) return !!data.doctorId;
-    if (step === 3) return !!data.date && !!data.time;
-    if (step === 4) return !!data.typeId;
-    if (step === 5) return !!data.officeId;
+    if (step === 3) return !!data.officeId;
+    if (step === 4) return !!data.date && !!data.time;
+    if (step === 5) return !!data.typeId;
     return true;
   }
 
@@ -117,21 +115,20 @@ export default function NewAppointment() {
 
   async function submit() {
     setSubmitting(true);
-    const apptType = appointmentTypes.find(t => t.id === parseInt(data.typeId));
     try {
       const [year, month, day] = data.date.split('-');
       const [hour, minute] = data.time.split(':');
       const startAt = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute)).toISOString();
 
       await createAppointment({
-        patientId: parseInt(data.patientId),
-        doctorId: parseInt(data.doctorId),
-        officeId: parseInt(data.officeId),
-        appointmentTypeId: parseInt(data.typeId),
+        patientId: data.patientId,
+        doctorId: data.doctorId,
+        officeId: data.officeId,
+        appointmentTypeId: data.typeId,
         startAt,
-        durationMinutes: apptType?.durationMinutes || 30,
       });
-      const patientName = patients.find(p => p.id === parseInt(data.patientId))?.fullName || 'Patient';
+      const patientObj = patients.find(p => p.id === data.patientId);
+      const patientName = patientObj ? (patientObj.fullName || `${patientObj.firstName} ${patientObj.lastName}`) : 'Patient';
       toast.success(`Appointment for ${patientName} created`, { title: 'Appointment scheduled' });
       clear();
       setSubmitting(false);
@@ -142,15 +139,15 @@ export default function NewAppointment() {
     }
   }
 
-  const patient = patients.find(p => p.id === parseInt(data.patientId));
-  const doctor = doctors.find(d => d.id === parseInt(data.doctorId));
-  const type = appointmentTypes.find(t => t.id === parseInt(data.typeId));
-  const office = offices.find(o => o.id === parseInt(data.officeId));
-  const specialty = specialties.find(s => (s.id || s.id) === parseInt(data.specialtyId));
+  const patient = patients.find(p => p.id === data.patientId);
+  const doctor = doctors.find(d => d.id === data.doctorId);
+  const type = appointmentTypes.find(t => t.id === data.typeId);
+  const office = offices.find(o => o.id === data.officeId);
+  const specialty = specialties.find(s => s.id === data.specialtyId);
 
   if (confirmed) {
-    const patientName = patient?.fullName || '';
-    const doctorName = doctor?.fullName || doctor?.name || '';
+    const patientName = patient ? (patient.fullName || `${patient.firstName} ${patient.lastName}`) : '';
+    const doctorName = doctor ? `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim() : '';
     return (
       <div className="app-layout fade-in">
         <div className="confirmation-pulse card" style={{ textAlign: 'center', padding: '60px 40px' }}>
@@ -248,7 +245,7 @@ export default function NewAppointment() {
                   className={`patient-card ${data.patientId === String(p.id) ? 'selected' : ''}`}
                   onClick={() => setData({ ...data, patientId: String(p.id) })}
                 >
-                  <div className="patient-card-name">{p.fullName || p.firstName + ' ' + p.lastName}</div>
+                  <div className="patient-card-name">{`${p.firstName || ''} ${p.lastName || ''}`.trim()}</div>
                   <div className="patient-card-meta">{p.documentNumber || p.studentId || p.id} · {p.email}</div>
                 </button>
               ))}
@@ -279,9 +276,8 @@ export default function NewAppointment() {
             </div>
             <div className="doctor-list">
               {doctorsBySpecialty.map(d => {
-                const docSpecId = d.specialtyId || d.specialty;
-                const sp = specialties.find(s => s.id === docSpecId);
-                const name = d.fullName || d.name || 'Doctor';
+                const sp = specialties.find(s => s.id === d.specialtyId);
+                const name = `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Doctor';
                 return (
                   <button
                     key={d.id}
@@ -300,6 +296,24 @@ export default function NewAppointment() {
 
         {step === 3 && (
           <div>
+            <h3 className="wizard-section-title">Select Office</h3>
+            <div className="office-list">
+              {offices.map(o => (
+                <button
+                  key={o.id}
+                  className={`office-card ${data.officeId === String(o.id) ? 'selected' : ''}`}
+                  onClick={() => setData({ ...data, officeId: String(o.id), time: '' })}
+                >
+                  <div className="office-card-name">{o.code}</div>
+                  <div className="office-card-floor">Floor {o.floor || '—'}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div>
             <h3 className="wizard-section-title">Select Date & Time</h3>
             <div className="form-group" style={{ maxWidth: 280, marginBottom: '24px' }}>
               <label className="form-label" htmlFor="appt-date">Date</label>
@@ -317,12 +331,12 @@ export default function NewAppointment() {
               selected={data.time}
               onSelect={(time) => setData({ ...data, time })}
               stagger={true}
-              gridKey={`${data.doctorId}-${data.date}`}
+              gridKey={`${data.doctorId}-${data.officeId}-${data.date}`}
             />
           </div>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <div>
             <h3 className="wizard-section-title">Select Appointment Type</h3>
             <div className="type-grid">
@@ -340,36 +354,18 @@ export default function NewAppointment() {
           </div>
         )}
 
-        {step === 5 && (
-          <div>
-            <h3 className="wizard-section-title">Select Office</h3>
-            <div className="office-list">
-              {offices.map(o => (
-                <button
-                  key={o.id}
-                  className={`office-card ${data.officeId === String(o.id) ? 'selected' : ''}`}
-                  onClick={() => setData({ ...data, officeId: String(o.id) })}
-                >
-                  <div className="office-card-name">{o.name}</div>
-                  <div className="office-card-floor">{o.floor || '—'}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {step === 6 && (
           <div>
             <h3 className="wizard-section-title">Review & Confirm</h3>
             <div className="review-grid">
               <div className="review-row">
                 <div className="review-label">Patient</div>
-                <div className="review-value">{patient?.fullName || ''}</div>
+                <div className="review-value">{patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}</div>
               </div>
               <div className="review-row">
                 <div className="review-label">Doctor</div>
                 <div className="review-value">
-                  {(doctor?.fullName || doctor?.name || '')}
+                  {doctor ? `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim() : ''}
                   {specialty ? <span style={{ color: specialty.color, fontSize: '13px' }}> · {specialty.name}</span> : null}
                 </div>
               </div>
@@ -387,7 +383,7 @@ export default function NewAppointment() {
               </div>
               <div className="review-row">
                 <div className="review-label">Office</div>
-                <div className="review-value">{office?.name || '—'}</div>
+                <div className="review-value">{office?.code || '—'}</div>
               </div>
             </div>
           </div>

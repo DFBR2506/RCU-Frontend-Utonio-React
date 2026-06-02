@@ -27,13 +27,13 @@ export async function confirmAppointment(id) {
   return response.data;
 }
 
-export async function cancelAppointment(id, cancelReason) {
-  const response = await api.patch(`/api/appointments/${id}/cancel`, { cancelReason });
+export async function cancelAppointment(id, cancellationReason) {
+  const response = await api.patch(`/api/appointments/${id}/cancel`, { cancellationReason });
   return response.data;
 }
 
-export async function completeAppointment(id, observations) {
-  const response = await api.patch(`/api/appointments/${id}/complete`, { observations: observations || null });
+export async function completeAppointment(id) {
+  const response = await api.patch(`/api/appointments/${id}/complete`);
   return response.data;
 }
 

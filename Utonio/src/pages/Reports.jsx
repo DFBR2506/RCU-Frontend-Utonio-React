@@ -95,8 +95,8 @@ function OccupancyChart({ data }) {
       <div style={{ width: '100%', height: 320, marginTop: 24 }}>
         <ResponsiveContainer>
           <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-            <XAxis dataKey="office" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
-            <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} unit="%" />
+            <XAxis dataKey="code" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
+            <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
             <Tooltip
               contentStyle={{
                 background: 'var(--bg-surface)',
@@ -106,7 +106,7 @@ function OccupancyChart({ data }) {
               }}
               cursor={{ fill: 'var(--accent-violet-dim)' }}
             />
-            <Bar dataKey="occupancy" radius={[8, 8, 0, 0]}>
+            <Bar dataKey="totalAppointments" radius={[8, 8, 0, 0]}>
               {(data ?? []).map((entry, i) => (
                 <Cell key={i} fill="var(--accent-violet)" />
               ))}
@@ -133,9 +133,9 @@ function ProductivityChart({ data }) {
       <p className="chart-subtitle">Total completed appointments ranked by doctor</p>
       <div style={{ width: '100%', height: 320, marginTop: 24 }}>
         <ResponsiveContainer>
-          <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 8 }}>
+          <BarChart data={data.map(d => ({ ...d, doctorName: `${d.firstName} ${d.lastName}` }))} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 8 }}>
             <XAxis type="number" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
-            <YAxis type="category" dataKey="doctor" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} width={140} />
+            <YAxis type="category" dataKey="doctorName" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} width={140} />
             <Tooltip
               contentStyle={{
                 background: 'var(--bg-surface)',
@@ -145,7 +145,7 @@ function ProductivityChart({ data }) {
               }}
               cursor={{ fill: 'var(--accent-lime-dim)' }}
             />
-            <Bar dataKey="completed" radius={[0, 8, 8, 0]}>
+            <Bar dataKey="completedAppointments" radius={[0, 8, 8, 0]}>
               {(data ?? []).map((entry, i) => (
                 <Cell key={i} fill="var(--accent-lime)" />
               ))}
@@ -183,17 +183,17 @@ function NoShowTable({ data }) {
           </thead>
           <tbody>
             {(data ?? []).map((row, i) => (
-              <tr key={i} style={row.count >= 3 ? { background: 'var(--accent-red-dim)' } : {}}>
-                <td style={{ color: row.count >= 3 ? 'var(--accent-red)' : 'var(--text-primary)', fontWeight: row.count >= 3 ? 600 : 500 }}>
-                  {row.patient}
+              <tr key={i} style={row.noShowCount >= 3 ? { background: 'var(--accent-red-dim)' } : {}}>
+                <td style={{ color: row.noShowCount >= 3 ? 'var(--accent-red)' : 'var(--text-primary)', fontWeight: row.noShowCount >= 3 ? 600 : 500 }}>
+                  {`${row.firstName || ''} ${row.lastName || ''}`.trim()}
                 </td>
-                <td>{row.documentNumber || row.studentId || '—'}</td>
+                <td>—</td>
                 <td>
-                  <span className={`badge ${row.count >= 3 ? 'badge-no_show' : 'badge-scheduled'}`}>
-                    {row.count}
+                  <span className={`badge ${row.noShowCount >= 3 ? 'badge-no_show' : 'badge-scheduled'}`}>
+                    {row.noShowCount}
                   </span>
                 </td>
-                <td>{row.lastDate || '—'}</td>
+                <td>—</td>
               </tr>
             ))}
           </tbody>

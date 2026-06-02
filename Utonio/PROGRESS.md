@@ -570,6 +570,33 @@
 
 ### Next Tasks (see TASK_QUEUE.md)
 - [ ] Backend integration: connect to Spring Boot API (API client is ready, ensure backend is running at `VITE_API_URL`)
-- [ ] Patient profile page
+- [ ] Patient profile page — `/patients/:id` mirroring DoctorProfile
 - [ ] Bulk appointment actions (cancel multiple, reschedule)
 - [ ] Email notifications system
+
+---
+
+## Session 9 — 2026-06-02 (README polish + LaTeX doc)
+
+### Completed ✅
+
+**Frontend README rewrite**
+- Replaced the previous "simple" README with a comprehensive reference document
+- Added: project features list, environment variables table, expanded component library section, testing table (48 tests), keyboard shortcuts table, wizard step-by-step with code example, ScheduleEditor detail, UI component descriptions per component, tech decisions table
+- Document length: ~350 lines vs ~100 original
+
+**Backend README** — already comprehensive; no changes needed
+
+**LaTeX document fix (WebCompleto.tex)**
+- Fixed package order: `xcolor` + `\definecolor` blocks now load **before** `\usepackage{hyperref}` (the original order caused `navyblue` to be undefined when `\hypersetup` ran)
+- Fixed `\newtcolorbox` definitions for `infobox`, `warningbox`, `successbox`: removed the trailing `#1` that was being passed as extra key-value options (tcolorbox doesn't accept a plain string as an option key)
+- Added sensible default titles to each box type
+- Compiled to PDF — see `WebCompleto.pdf` in `C:\Users\User\OneDrive\Escritorio\monis\Nueva carpeta\`
+
+### Quality Gates
+- `pnpm lint` ✅ (no changes to JS/JSX in this session)
+- LaTeX PDF compiled successfully
+
+---
+
+*Last updated: 2026-06-02 — Session 9 (README polish, LaTeX fix + PDF generated).*

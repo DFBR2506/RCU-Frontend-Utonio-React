@@ -67,7 +67,7 @@ export default function Appointments() {
       setAppointments(apptsData.content || apptsData);
       setDoctors(docsData.content || docsData);
       setPatients(patsData.content || patsData);
-      setOffices(Array.isArray(offsData) ? offsData : []);
+      setOffices(offsData.content || (Array.isArray(offsData) ? offsData : []));
     } catch (err) {
       console.error(err);
       toast.error('Failed to load appointments');
@@ -83,12 +83,12 @@ export default function Appointments() {
 
   function getDoctorName(id) {
     const d = doctors.find(d => d.id === id);
-    return d ? (d.fullName || d.name || 'Unknown') : 'Unknown';
+    return d ? `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown' : 'Unknown';
   }
 
   function getOfficeName(id) {
     const o = offices.find(o => o.id === id);
-    return o ? o.name : '—';
+    return o ? o.code : '—';
   }
 
   function openAppointment(appt) {
@@ -126,7 +126,7 @@ export default function Appointments() {
     return appointments.filter(a => {
       const { date, time } = parseDateTime(a.startAt);
       if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
-      if (doctorFilter !== 'ALL' && a.doctorId !== parseInt(doctorFilter)) return false;
+      if (doctorFilter !== 'ALL' && a.doctorId !== doctorFilter) return false;
       if (dateFilter && date !== dateFilter) return false;
       if (q) {
         const patientName = getPatientName(a.patientId).toLowerCase();
@@ -258,7 +258,7 @@ export default function Appointments() {
           >
             <option value="ALL">All Doctors</option>
             {doctors.map(d => (
-              <option key={d.id} value={d.id}>{d.fullName || d.name}</option>
+              <option key={d.id} value={d.id}>{`${d.firstName || ''} ${d.lastName || ''}`.trim()}</option>
             ))}
           </select>
         </div>

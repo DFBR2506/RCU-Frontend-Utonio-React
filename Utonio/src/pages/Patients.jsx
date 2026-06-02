@@ -8,7 +8,9 @@ import SlideOver from '../components/UI/SlideOver';
 import FloatingField from '../components/UI/FloatingField';
 import './Patients.css';
 
-const EMPTY_FORM = { fullName: '', email: '', phoneNumber: '', documentNumber: '', studentCode: '' };
+const DOCUMENT_TYPES = ['CC', 'TI', 'CE', 'PASSPORT'];
+const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
+const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '', documentType: 'CC', documentNumber: '', gender: 'MALE' };
 
 export default function Patients() {
   const toast = useToast();
@@ -49,11 +51,13 @@ export default function Patients() {
   function openEdit(patient) {
     setEditing(patient);
     setForm({
-      fullName: patient.fullName || '',
+      firstName: patient.firstName || '',
+      lastName: patient.lastName || '',
       email: patient.email || '',
-      phoneNumber: patient.phoneNumber || '',
+      phone: patient.phone || '',
+      documentType: patient.documentType || 'CC',
       documentNumber: patient.documentNumber || '',
-      studentCode: patient.studentCode || '',
+      gender: patient.gender || 'MALE',
     });
     setErrors({});
     setSlideOpen(true);
@@ -73,11 +77,14 @@ export default function Patients() {
 
   function validate() {
     const e = {};
-    if (!form.fullName.trim()) e.fullName = 'Required';
+    if (!form.firstName.trim()) e.firstName = 'Required';
+    if (!form.lastName.trim()) e.lastName = 'Required';
     if (!form.email.trim()) e.email = 'Required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
-    if (!form.phoneNumber.trim()) e.phoneNumber = 'Required';
+    if (!form.phone.trim()) e.phone = 'Required';
     if (!form.documentNumber.trim()) e.documentNumber = 'Required';
+    if (!form.documentType) e.documentType = 'Required';
+    if (!form.gender) e.gender = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -89,10 +96,10 @@ export default function Patients() {
     try {
       if (editing) {
         await updatePatient(editing.id, form);
-        toast.success(`${form.fullName} updated successfully`);
+        toast.success(`${form.firstName} ${form.lastName} updated successfully`);
       } else {
         await createPatient(form);
-        toast.success(`${form.fullName} registered successfully`, { title: 'Patient created' });
+        toast.success(`${form.firstName} ${form.lastName} registered successfully`, { title: 'Patient created' });
       }
       await load();
       clear();
@@ -108,12 +115,13 @@ export default function Patients() {
   }
 
   async function toggleStatus(patient) {
-    const newStatus = patient.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    if (confirm(`Set ${patient.fullName} as ${newStatus}?`)) {
+    const newActive = !patient.active;
+    const name = `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
+    if (confirm(`Set ${name} as ${newActive ? 'ACTIVE' : 'INACTIVE'}?`)) {
       try {
-        await updatePatient(patient.id, { status: newStatus });
+        await updatePatient(patient.id, { active: newActive });
         await load();
-        toast.info(`${patient.fullName} marked as ${newStatus.toLowerCase()}`);
+        toast.info(`${name} marked as ${newActive ? 'active' : 'inactive'}`);
       } catch {
         toast.error('Could not update status');
       }
@@ -125,17 +133,19 @@ export default function Patients() {
     {
       key: 'name',
       label: 'Full Name',
-      render: (p) => p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+      render: (p) => `${p.firstName || ''} ${p.lastName || ''}`.trim(),
     },
     { key: 'email', label: 'Email' },
-    { key: 'phoneNumber', label: 'Phone', width: '160px' },
+    { key: 'phone', label: 'Phone', width: '160px' },
+    { key: 'documentType', label: 'Doc Type', width: '100px' },
+    { key: 'gender', label: 'Gender', width: '100px' },
     {
-      key: 'status',
+      key: 'active',
       label: 'Status',
-      width: '120px',
+      width: '100px',
       render: (p) => (
-        <span className={`patient-status ${p.status === 'ACTIVE' ? 'active' : 'inactive'}`}>
-          {p.status}
+        <span className={`patient-status ${p.active ? 'active' : 'inactive'}`}>
+          {p.active ? 'ACTIVE' : 'INACTIVE'}
         </span>
       ),
     },
@@ -198,15 +208,26 @@ export default function Patients() {
             </div>
           ) : null}
 
-          <FloatingField
-            id="fullName"
-            label="Full Name"
-            value={form.fullName}
-            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-            error={errors.fullName}
-            required
-            autoComplete="name"
-          />
+          <div className="floating-row">
+            <FloatingField
+              id="firstName"
+              label="First Name"
+              value={form.firstName}
+              onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+              error={errors.firstName}
+              required
+              autoComplete="given-name"
+            />
+            <FloatingField
+              id="lastName"
+              label="Last Name"
+              value={form.lastName}
+              onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+              error={errors.lastName}
+              required
+              autoComplete="family-name"
+            />
+          </div>
 
           <FloatingField
             id="email"
@@ -222,12 +243,12 @@ export default function Patients() {
 
           <div className="floating-row">
             <FloatingField
-              id="phoneNumber"
+              id="phone"
               label="Phone"
               type="tel"
-              value={form.phoneNumber}
-              onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
-              error={errors.phoneNumber}
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              error={errors.phone}
               required
               autoComplete="tel"
               inputMode="tel"
@@ -242,13 +263,37 @@ export default function Patients() {
             />
           </div>
 
-          <FloatingField
-            id="studentCode"
-            label="Student Code"
-            value={form.studentCode}
-            onChange={(e) => setForm({ ...form, studentCode: e.target.value })}
-            autoComplete="off"
-          />
+          <div className="floating-row">
+            <div className="floating-field-group">
+              <label htmlFor="documentType" className="floating-select-label">
+                Doc Type <span className="floating-required" aria-hidden="true"> *</span>
+              </label>
+              <select
+                id="documentType"
+                className={`floating-select ${errors.documentType ? 'error' : ''}`}
+                value={form.documentType}
+                onChange={(e) => setForm({ ...form, documentType: e.target.value })}
+              >
+                {DOCUMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {errors.documentType && <span className="form-error floating-error">{errors.documentType}</span>}
+            </div>
+
+            <div className="floating-field-group">
+              <label htmlFor="gender" className="floating-select-label">
+                Gender <span className="floating-required" aria-hidden="true"> *</span>
+              </label>
+              <select
+                id="gender"
+                className={`floating-select ${errors.gender ? 'error' : ''}`}
+                value={form.gender}
+                onChange={(e) => setForm({ ...form, gender: e.target.value })}
+              >
+                {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+              {errors.gender && <span className="form-error floating-error">{errors.gender}</span>}
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
             <button type="submit" className="btn-primary" disabled={submitting} style={{ flex: 1 }}>

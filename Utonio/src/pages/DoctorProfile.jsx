@@ -33,7 +33,7 @@ function getType(id) {
 
 function getOfficeName(id, offices) {
   const o = offices.find(o => o.id === id);
-  return o ? o.name : '—';
+  return o ? o.code : '—';
 }
 
 function getPatientName(id, patients) {
@@ -64,12 +64,12 @@ export default function DoctorProfile() {
       getSpecialties(),
     ]).then(([docsData, apptsData, patsData, offsData, specsData]) => {
       if (cancelled) return;
-      const doc = (docsData.content || docsData).find(d => d.id === parseInt(id));
+      const doc = (docsData.content || docsData).find(d => d.id === id);
       setDoctor(doc || null);
-      setAppointments((apptsData.content || apptsData).filter(a => a.doctorId === parseInt(id)));
+      setAppointments((apptsData.content || apptsData).filter(a => a.doctorId === id));
       setPatients((patsData.content || patsData));
-      setOffices(Array.isArray(offsData) ? offsData : []);
-      setSpecialties(specsData);
+      setOffices(offsData.content || (Array.isArray(offsData) ? offsData : []));
+      setSpecialties(specsData.content || specsData);
       setLoading(false);
     }).catch(() => {
       if (cancelled) return;
@@ -143,9 +143,9 @@ export default function DoctorProfile() {
 
   const specId = doctor.specialtyId || doctor.specialty;
   const specialty = specialties.find(s => s.id === specId) || { name: specId, color: '#7B6EF6' };
-  const name = doctor.fullName || doctor.name || 'Doctor';
+  const name = `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim() || 'Doctor';
   const initials = getInitials(name);
-  const isActive = doctor.status === 'ACTIVE';
+  const isActive = doctor.active === true;
 
   return (
     <div className="app-layout fade-in">

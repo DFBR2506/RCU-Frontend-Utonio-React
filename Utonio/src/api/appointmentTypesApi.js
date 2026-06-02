@@ -6,6 +6,6 @@ export async function getAppointmentTypes() {
 }
 
 export async function createAppointmentType(data) {
-  const response = await api.post('/api/appointment-types', data);
+  const response = await api.post('/api/appointment-types', { ...data, durationMinutes: Number(data.durationMinutes) });
   return response.data;
 }
