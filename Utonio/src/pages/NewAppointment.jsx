@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Check, FileSignature, RotateCcw } from 'lucide-react';
-import { api } from '../services/api';
-import { APPOINTMENT_TYPES, OFFICES } from '../data/constants';
+import { getPatients } from '../api/patientsApi';
+import { getDoctors } from '../api/doctorsApi';
+import { getSpecialties } from '../api/specialtiesApi';
+import { getAppointmentTypes } from '../api/appointmentTypesApi';
+import { getOffices } from '../api/officesApi';
+import { getAvailableSlots } from '../api/availabilityApi';
+import { createAppointment } from '../api/appointmentsApi';
 import { useToast } from '../hooks/useToast';
 import useFormDraft, { draftAge } from '../hooks/useFormDraft';
 import TimeSlotGrid from '../components/UI/TimeSlotGrid';
@@ -19,13 +24,20 @@ const STEPS = [
 
 const initialAppointment = (searchParams) => ({
   patientId: '',
-  specialty: '',
+  specialtyId: '',
   doctorId: searchParams.get('doctorId') || '',
   date: searchParams.get('date') || new Date().toISOString().split('T')[0],
   time: searchParams.get('time') || '',
   typeId: '',
   officeId: '',
 });
+
+function parseSlots(slots) {
+  return slots.map(s => ({
+    time: (s.slotStart || s.time || '').substring(0, 5),
+    available: true,
+  }));
+}
 
 export default function NewAppointment() {
   const navigate = useNavigate();
@@ -39,6 +51,8 @@ export default function NewAppointment() {
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [specialties, setSpecialties] = useState([]);
+  const [appointmentTypes, setAppointmentTypes] = useState([]);
+  const [offices, setOffices] = useState([]);
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -48,34 +62,38 @@ export default function NewAppointment() {
     if (hasDraft && savedAt) {
       toast.info(`Draft restored from ${draftAge(savedAt)}`, { title: 'Resuming appointment' });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     async function load() {
-      const [pats, docs, specs] = await Promise.all([
-        api.patients.list(),
-        api.doctors.list(),
-        api.specialties.list(),
+      const [pats, docs, specs, types, offs] = await Promise.all([
+        getPatients(0, 100),
+        getDoctors(0, 100),
+        getSpecialties(),
+        getAppointmentTypes(),
+        getOffices(),
       ]);
-      setPatients(pats);
-      setDoctors(docs);
+      setPatients(pats.content || pats);
+      setDoctors(docs.content || docs);
       setSpecialties(specs);
+      setAppointmentTypes(types);
+      setOffices(Array.isArray(offs) ? offs : []);
       setLoading(false);
     }
     load();
   }, []);
 
   useEffect(() => {
-    if (data.doctorId && data.date) {
-      api.availability.get(parseInt(data.doctorId), data.date).then(setSlots);
-    } else {
-      Promise.resolve().then(() => setSlots([]));
+    if (!data.doctorId || !data.date) {
+      return;
     }
+    getAvailableSlots(parseInt(data.doctorId), data.date)
+      .then(s => setSlots(parseSlots(s)))
+      .catch(() => setSlots([]));
   }, [data.doctorId, data.date]);
 
-  const doctorsBySpecialty = data.specialty
-    ? doctors.filter(d => d.specialty === data.specialty && d.status === 'ACTIVE')
+  const doctorsBySpecialty = data.specialtyId
+    ? doctors.filter(d => (d.specialtyId || d.specialty) === parseInt(data.specialtyId) && d.status === 'ACTIVE')
     : doctors.filter(d => d.status === 'ACTIVE');
 
   function canAdvance() {
@@ -99,35 +117,40 @@ export default function NewAppointment() {
 
   async function submit() {
     setSubmitting(true);
-    const apptType = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
+    const apptType = appointmentTypes.find(t => t.id === parseInt(data.typeId));
     try {
-      await api.appointments.create({
+      const [year, month, day] = data.date.split('-');
+      const [hour, minute] = data.time.split(':');
+      const startAt = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute)).toISOString();
+
+      await createAppointment({
         patientId: parseInt(data.patientId),
         doctorId: parseInt(data.doctorId),
         officeId: parseInt(data.officeId),
-        typeId: data.typeId,
-        date: data.date,
-        time: data.time,
-        duration: apptType?.duration || 30,
+        appointmentTypeId: parseInt(data.typeId),
+        startAt,
+        durationMinutes: apptType?.durationMinutes || 30,
       });
-      const patientName = `${patient?.firstName ?? ''} ${patient?.lastName ?? ''}`.trim();
+      const patientName = patients.find(p => p.id === parseInt(data.patientId))?.fullName || 'Patient';
       toast.success(`Appointment for ${patientName} created`, { title: 'Appointment scheduled' });
       clear();
       setSubmitting(false);
       setConfirmed(true);
     } catch (err) {
       setSubmitting(false);
-      toast.error(err.message || 'Could not create appointment');
+      toast.error(err?.response?.data?.message || 'Could not create appointment');
     }
   }
 
   const patient = patients.find(p => p.id === parseInt(data.patientId));
   const doctor = doctors.find(d => d.id === parseInt(data.doctorId));
-  const type = APPOINTMENT_TYPES.find(t => t.id === data.typeId);
-  const office = OFFICES.find(o => o.id === parseInt(data.officeId));
-  const specialty = specialties.find(s => s.id === doctor?.specialty);
+  const type = appointmentTypes.find(t => t.id === parseInt(data.typeId));
+  const office = offices.find(o => o.id === parseInt(data.officeId));
+  const specialty = specialties.find(s => (s.id || s.id) === parseInt(data.specialtyId));
 
   if (confirmed) {
+    const patientName = patient?.fullName || '';
+    const doctorName = doctor?.fullName || doctor?.name || '';
     return (
       <div className="app-layout fade-in">
         <div className="confirmation-pulse card" style={{ textAlign: 'center', padding: '60px 40px' }}>
@@ -136,7 +159,7 @@ export default function NewAppointment() {
           </div>
           <h1 className="page-title" style={{ marginTop: '24px' }}>Appointment Confirmed</h1>
           <p className="page-subtitle">
-            {patient?.firstName} {patient?.lastName} with {doctor?.name}
+            {patientName} with {doctorName}
             <br />
             {data.date} at {data.time}
           </p>
@@ -214,7 +237,7 @@ export default function NewAppointment() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search by name or student ID..."
+                placeholder="Search by name or document number..."
                 id="patient-search-input"
               />
             </div>
@@ -225,8 +248,8 @@ export default function NewAppointment() {
                   className={`patient-card ${data.patientId === String(p.id) ? 'selected' : ''}`}
                   onClick={() => setData({ ...data, patientId: String(p.id) })}
                 >
-                  <div className="patient-card-name">{p.firstName} {p.lastName}</div>
-                  <div className="patient-card-meta">{p.studentId} · {p.email}</div>
+                  <div className="patient-card-name">{p.fullName || p.firstName + ' ' + p.lastName}</div>
+                  <div className="patient-card-meta">{p.documentNumber || p.studentId || p.id} · {p.email}</div>
                 </button>
               ))}
             </div>
@@ -238,17 +261,17 @@ export default function NewAppointment() {
             <h3 className="wizard-section-title">Select Specialty & Doctor</h3>
             <div className="specialty-tabs" style={{ marginBottom: '20px' }}>
               <button
-                className={`specialty-tab ${!data.specialty ? 'active' : ''}`}
-                onClick={() => setData({ ...data, specialty: '', doctorId: '' })}
+                className={`specialty-tab ${!data.specialtyId ? 'active' : ''}`}
+                onClick={() => setData({ ...data, specialtyId: '', doctorId: '' })}
               >
                 All
               </button>
               {specialties.map(sp => (
                 <button
                   key={sp.id}
-                  className={`specialty-tab ${data.specialty === sp.id ? 'active' : ''}`}
-                  onClick={() => setData({ ...data, specialty: sp.id, doctorId: '' })}
-                  style={data.specialty === sp.id ? { borderColor: sp.color, color: sp.color } : {}}
+                  className={`specialty-tab ${data.specialtyId === String(sp.id) ? 'active' : ''}`}
+                  onClick={() => setData({ ...data, specialtyId: String(sp.id), doctorId: '' })}
+                  style={data.specialtyId === String(sp.id) ? { borderColor: sp.color, color: sp.color } : {}}
                 >
                   {sp.name}
                 </button>
@@ -256,7 +279,9 @@ export default function NewAppointment() {
             </div>
             <div className="doctor-list">
               {doctorsBySpecialty.map(d => {
-                const sp = specialties.find(s => s.id === d.specialty);
+                const docSpecId = d.specialtyId || d.specialty;
+                const sp = specialties.find(s => s.id === docSpecId);
+                const name = d.fullName || d.name || 'Doctor';
                 return (
                   <button
                     key={d.id}
@@ -264,7 +289,7 @@ export default function NewAppointment() {
                     onClick={() => setData({ ...data, doctorId: String(d.id) })}
                     style={data.doctorId === String(d.id) && sp ? { borderColor: sp.color } : {}}
                   >
-                    <div className="doctor-option-name">{d.name}</div>
+                    <div className="doctor-option-name">{name}</div>
                     <div className="doctor-option-specialty" style={{ color: sp?.color }}>{sp?.name}</div>
                   </button>
                 );
@@ -301,14 +326,14 @@ export default function NewAppointment() {
           <div>
             <h3 className="wizard-section-title">Select Appointment Type</h3>
             <div className="type-grid">
-              {APPOINTMENT_TYPES.map(t => (
+              {appointmentTypes.map(t => (
                 <button
                   key={t.id}
-                  className={`type-card ${data.typeId === t.id ? 'selected' : ''}`}
-                  onClick={() => setData({ ...data, typeId: t.id })}
+                  className={`type-card ${data.typeId === String(t.id) ? 'selected' : ''}`}
+                  onClick={() => setData({ ...data, typeId: String(t.id) })}
                 >
                   <div className="type-card-name">{t.name}</div>
-                  <div className="type-card-duration">{t.duration} min</div>
+                  <div className="type-card-duration">{t.durationMinutes || 30} min</div>
                 </button>
               ))}
             </div>
@@ -319,14 +344,14 @@ export default function NewAppointment() {
           <div>
             <h3 className="wizard-section-title">Select Office</h3>
             <div className="office-list">
-              {OFFICES.map(o => (
+              {offices.map(o => (
                 <button
                   key={o.id}
                   className={`office-card ${data.officeId === String(o.id) ? 'selected' : ''}`}
                   onClick={() => setData({ ...data, officeId: String(o.id) })}
                 >
                   <div className="office-card-name">{o.name}</div>
-                  <div className="office-card-floor">{o.floor}</div>
+                  <div className="office-card-floor">{o.floor || '—'}</div>
                 </button>
               ))}
             </div>
@@ -339,11 +364,14 @@ export default function NewAppointment() {
             <div className="review-grid">
               <div className="review-row">
                 <div className="review-label">Patient</div>
-                <div className="review-value">{patient?.firstName} {patient?.lastName}</div>
+                <div className="review-value">{patient?.fullName || ''}</div>
               </div>
               <div className="review-row">
                 <div className="review-label">Doctor</div>
-                <div className="review-value">{doctor?.name} <span style={{ color: specialty?.color, fontSize: '13px' }}>· {specialty?.name}</span></div>
+                <div className="review-value">
+                  {(doctor?.fullName || doctor?.name || '')}
+                  {specialty ? <span style={{ color: specialty.color, fontSize: '13px' }}> · {specialty.name}</span> : null}
+                </div>
               </div>
               <div className="review-row">
                 <div className="review-label">Date</div>
@@ -355,11 +383,11 @@ export default function NewAppointment() {
               </div>
               <div className="review-row">
                 <div className="review-label">Type</div>
-                <div className="review-value">{type?.name} ({type?.duration} min)</div>
+                <div className="review-value">{type?.name || '—'} ({type?.durationMinutes || 30} min)</div>
               </div>
               <div className="review-row">
                 <div className="review-label">Office</div>
-                <div className="review-value">{office?.name}</div>
+                <div className="review-value">{office?.name || '—'}</div>
               </div>
             </div>
           </div>

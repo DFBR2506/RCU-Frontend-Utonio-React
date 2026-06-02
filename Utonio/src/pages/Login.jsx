@@ -2,24 +2,21 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { LogIn, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
-import { useToast } from '../hooks/useToast';
-import ShaderBackground from '../components/ShaderBackground';
 import './Login.css';
 
 const TEST_USERS = [
-  { email: 'admin@utonio.edu', password: 'admin123', name: 'Dr. Admin', role: 'admin' },
-  { email: 'reception@utonio.edu', password: 'recep123', name: 'Reception Staff', role: 'receptionist' },
-  { email: 'doctor@utonio.edu', password: 'doctor123', name: 'Dr. Sarah Chen', role: 'doctor' },
+  { documentNumber: 'admin@utonio.edu', password: 'admin123', name: 'Admin User', role: 'admin' },
+  { documentNumber: 'reception@utonio.edu', password: 'recep123', name: 'Reception Staff', role: 'receptionist' },
+  { documentNumber: 'doctor@utonio.edu', password: 'doctor123', name: 'Dr. Sarah Chen', role: 'doctor' },
 ];
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [documentNumber, setDocumentNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated } = useAuth();
-  const toast = useToast();
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
@@ -27,13 +24,13 @@ export default function Login() {
     e.preventDefault();
     setError('');
 
-    if (!email.trim() || !password.trim()) {
-      setError('Please enter your email and password.');
+    if (!documentNumber.trim() || !password.trim()) {
+      setError('Please enter your document number and password.');
       return;
     }
 
     setLoading(true);
-    const result = await login(email, password);
+    const result = await login(documentNumber, password);
     setLoading(false);
 
     if (!result.success) {
@@ -41,14 +38,13 @@ export default function Login() {
       return;
     }
 
-    const matched = TEST_USERS.find(u => u.email === email);
-    toast.success(`Welcome back, ${matched?.name || email}`, { title: 'Signed in' });
+    const matched = TEST_USERS.find(u => u.documentNumber === documentNumber);
+    const welcomeName = matched?.name || documentNumber;
+    document.title = `Welcome, ${welcomeName}`;
   }
 
   return (
     <div className="login-page">
-      <ShaderBackground />
-
       <div className="login-card">
         <div className="login-brand">
           <div className="login-logo">
@@ -70,15 +66,15 @@ export default function Login() {
           )}
 
           <div className="form-group">
-            <label className="form-label" htmlFor="email">Email</label>
+            <label className="form-label" htmlFor="documentNumber">Document Number</label>
             <input
-              id="email"
-              type="email"
+              id="documentNumber"
+              type="text"
               className="form-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@utonio.edu"
-              autoComplete="email"
+              value={documentNumber}
+              onChange={(e) => setDocumentNumber(e.target.value)}
+              placeholder="Enter your document number"
+              autoComplete="username"
               required
             />
           </div>
@@ -132,13 +128,13 @@ export default function Login() {
           <div className="login-hint-grid">
             {TEST_USERS.map(u => (
               <button
-                key={u.email}
+                key={u.documentNumber}
                 type="button"
                 className="login-hint-card"
-                onClick={() => { setEmail(u.email); setPassword(u.password); }}
+                onClick={() => { setDocumentNumber(u.documentNumber); setPassword(u.password); }}
               >
                 <span className="login-hint-role">{u.role}</span>
-                <span className="login-hint-email">{u.email}</span>
+                <span className="login-hint-email">{u.documentNumber}</span>
               </button>
             ))}
           </div>

@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, Search, FileBarChart, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
-import { api } from '../services/api';
+import { getAppointments } from '../api/appointmentsApi';
+import { getPatients } from '../api/patientsApi';
+import { getDoctors } from '../api/doctorsApi';
 import StatusBadge from '../components/UI/StatusBadge';
 import EmptyState from '../components/UI/EmptyState';
 import './Dashboard.css';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function parseDateTime(iso) {
+  if (!iso) return { date: '', time: '' };
+  const [date, time] = iso.split('T');
+  return { date, time: time?.substring(0, 5) || '' };
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -20,14 +28,14 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [appts, pats, docs] = await Promise.all([
-          api.appointments.list(),
-          api.patients.list(),
-          api.doctors.list()
+        const [apptsData, patsData, docsData] = await Promise.all([
+          getAppointments({}, 0, 100),
+          getPatients(0, 100),
+          getDoctors(0, 100),
         ]);
-        setAppointments(appts);
-        setPatients(pats);
-        setDoctors(docs);
+        setAppointments(apptsData.content || apptsData);
+        setPatients(patsData.content || patsData);
+        setDoctors(docsData.content || docsData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -38,13 +46,19 @@ export default function Dashboard() {
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayAppts = appointments.filter(a => a.date === todayStr);
+  const todayAppts = appointments.filter(a => {
+    const { date } = parseDateTime(a.startAt);
+    return date === todayStr;
+  });
   const confirmedCount = appointments.filter(a => a.status === 'CONFIRMED').length;
   const scheduledCount = appointments.filter(a => a.status === 'SCHEDULED').length;
   const completedCount = appointments.filter(a => a.status === 'COMPLETED').length;
   const noShowCount = appointments.filter(a => a.status === 'NO_SHOW').length;
 
-  const getApptsForDate = (date) => appointments.filter(a => a.date === date);
+  const getApptsForDate = (date) => appointments.filter(a => {
+    const d = parseDateTime(a.startAt).date;
+    return d === date;
+  });
 
   const calYear = calDate.getFullYear();
   const calMonth = calDate.getMonth();
@@ -69,16 +83,20 @@ export default function Dashboard() {
 
   const getPatientName = (id) => {
     const p = patients.find(p => p.id === id);
-    return p ? `${p.firstName} ${p.lastName}` : 'Unknown';
+    return p ? (p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim()) : 'Unknown';
   };
 
   const getDoctorName = (id) => {
     const d = doctors.find(d => d.id === id);
-    return d ? d.name : 'Doctor';
+    return d ? (d.fullName || d.name || 'Doctor') : 'Doctor';
   };
 
   const recentAppts = [...appointments]
-    .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+    .sort((a, b) => {
+      const dateA = a.startAt || a.date || '';
+      const dateB = b.startAt || b.date || '';
+      return dateB.localeCompare(dateA);
+    })
     .slice(0, 5);
 
   if (loading) {
@@ -234,22 +252,25 @@ export default function Dashboard() {
                     </button>
                   }
                 />
-              ) : recentAppts.map(appt => (
-                <div
-                  key={appt.id}
-                  className="appointment-row"
-                  onClick={() => navigate('/appointments')}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Clock size={14} color="var(--text-secondary)" />
-                    <span className="appt-time">{appt.time}</span>
+              ) : recentAppts.map(appt => {
+                const { time } = parseDateTime(appt.startAt);
+                return (
+                  <div
+                    key={appt.id}
+                    className="appointment-row"
+                    onClick={() => navigate('/appointments')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={14} color="var(--text-secondary)" />
+                      <span className="appt-time">{time}</span>
+                    </div>
+                    <div className="appt-patient">{getPatientName(appt.patientId)}</div>
+                    <div className="appt-doctor">{getDoctorName(appt.doctorId)}</div>
+                    <StatusBadge status={appt.status} />
                   </div>
-                  <div className="appt-patient">{getPatientName(appt.patientId)}</div>
-                  <div className="appt-doctor">{getDoctorName(appt.doctorId)}</div>
-                  <StatusBadge status={appt.status} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

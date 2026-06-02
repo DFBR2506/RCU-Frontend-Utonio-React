@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UserPlus, Edit2, Power, FileSignature, X } from 'lucide-react';
-import { api } from '../services/api';
+import { getPatients, createPatient, updatePatient } from '../api/patientsApi';
 import { useToast } from '../hooks/useToast';
 import useFormDraft, { draftAge } from '../hooks/useFormDraft';
 import Table from '../components/UI/Table';
@@ -8,7 +8,7 @@ import SlideOver from '../components/UI/SlideOver';
 import FloatingField from '../components/UI/FloatingField';
 import './Patients.css';
 
-const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '', studentId: '', birthDate: '' };
+const EMPTY_FORM = { fullName: '', email: '', phoneNumber: '', documentNumber: '', studentCode: '' };
 
 export default function Patients() {
   const toast = useToast();
@@ -29,10 +29,11 @@ export default function Patients() {
   async function load() {
     setLoading(true);
     try {
-      const data = await api.patients.list();
-      setPatients(data);
+      const data = await getPatients(0, 100);
+      setPatients(data.content || data);
     } catch (err) {
       console.error(err);
+      toast.error('Failed to load patients');
     } finally {
       setLoading(false);
     }
@@ -48,12 +49,11 @@ export default function Patients() {
   function openEdit(patient) {
     setEditing(patient);
     setForm({
-      firstName: patient.firstName,
-      lastName: patient.lastName,
-      email: patient.email,
-      phone: patient.phone,
-      studentId: patient.studentId,
-      birthDate: patient.birthDate,
+      fullName: patient.fullName || '',
+      email: patient.email || '',
+      phoneNumber: patient.phoneNumber || '',
+      documentNumber: patient.documentNumber || '',
+      studentCode: patient.studentCode || '',
     });
     setErrors({});
     setSlideOpen(true);
@@ -73,12 +73,11 @@ export default function Patients() {
 
   function validate() {
     const e = {};
-    if (!form.firstName.trim()) e.firstName = 'Required';
-    if (!form.lastName.trim()) e.lastName = 'Required';
+    if (!form.fullName.trim()) e.fullName = 'Required';
     if (!form.email.trim()) e.email = 'Required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
-    if (!form.phone.trim()) e.phone = 'Required';
-    if (!form.studentId.trim()) e.studentId = 'Required';
+    if (!form.phoneNumber.trim()) e.phoneNumber = 'Required';
+    if (!form.documentNumber.trim()) e.documentNumber = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -89,11 +88,11 @@ export default function Patients() {
     setSubmitting(true);
     try {
       if (editing) {
-        await api.patients.update(editing.id, form);
-        toast.success(`${form.firstName} ${form.lastName} updated successfully`);
+        await updatePatient(editing.id, form);
+        toast.success(`${form.fullName} updated successfully`);
       } else {
-        await api.patients.create(form);
-        toast.success(`${form.firstName} ${form.lastName} registered successfully`, { title: 'Patient created' });
+        await createPatient(form);
+        toast.success(`${form.fullName} registered successfully`, { title: 'Patient created' });
       }
       await load();
       clear();
@@ -102,7 +101,7 @@ export default function Patients() {
       setForm(EMPTY_FORM);
     } catch (err) {
       console.error(err);
-      toast.error(err?.message || 'Could not save patient');
+      toast.error(err?.response?.data?.message || 'Could not save patient');
     } finally {
       setSubmitting(false);
     }
@@ -110,11 +109,11 @@ export default function Patients() {
 
   async function toggleStatus(patient) {
     const newStatus = patient.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    if (confirm(`Set ${patient.firstName} ${patient.lastName} as ${newStatus}?`)) {
+    if (confirm(`Set ${patient.fullName} as ${newStatus}?`)) {
       try {
-        await api.patients.update(patient.id, { status: newStatus });
+        await updatePatient(patient.id, { status: newStatus });
         await load();
-        toast.info(`${patient.firstName} ${patient.lastName} marked as ${newStatus.toLowerCase()}`);
+        toast.info(`${patient.fullName} marked as ${newStatus.toLowerCase()}`);
       } catch {
         toast.error('Could not update status');
       }
@@ -122,14 +121,14 @@ export default function Patients() {
   }
 
   const columns = [
-    { key: 'studentId', label: 'ID', width: '120px' },
+    { key: 'documentNumber', label: 'Document', width: '120px' },
     {
       key: 'name',
       label: 'Full Name',
-      render: (p) => `${p.firstName} ${p.lastName}`,
+      render: (p) => p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim(),
     },
     { key: 'email', label: 'Email' },
-    { key: 'phone', label: 'Phone', width: '160px' },
+    { key: 'phoneNumber', label: 'Phone', width: '160px' },
     {
       key: 'status',
       label: 'Status',
@@ -199,26 +198,15 @@ export default function Patients() {
             </div>
           ) : null}
 
-          <div className="floating-row">
-            <FloatingField
-              id="firstName"
-              label="First Name"
-              value={form.firstName}
-              onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              error={errors.firstName}
-              required
-              autoComplete="given-name"
-            />
-            <FloatingField
-              id="lastName"
-              label="Last Name"
-              value={form.lastName}
-              onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              error={errors.lastName}
-              required
-              autoComplete="family-name"
-            />
-          </div>
+          <FloatingField
+            id="fullName"
+            label="Full Name"
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            error={errors.fullName}
+            required
+            autoComplete="name"
+          />
 
           <FloatingField
             id="email"
@@ -234,33 +222,32 @@ export default function Patients() {
 
           <div className="floating-row">
             <FloatingField
-              id="phone"
+              id="phoneNumber"
               label="Phone"
               type="tel"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              error={errors.phone}
+              value={form.phoneNumber}
+              onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
+              error={errors.phoneNumber}
               required
               autoComplete="tel"
               inputMode="tel"
             />
             <FloatingField
-              id="studentId"
-              label="Student ID"
-              value={form.studentId}
-              onChange={(e) => setForm({ ...form, studentId: e.target.value })}
-              error={errors.studentId}
+              id="documentNumber"
+              label="Document Number"
+              value={form.documentNumber}
+              onChange={(e) => setForm({ ...form, documentNumber: e.target.value })}
+              error={errors.documentNumber}
               required
             />
           </div>
 
           <FloatingField
-            id="birthDate"
-            label="Birth Date"
-            type="date"
-            value={form.birthDate}
-            onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
-            autoComplete="bday"
+            id="studentCode"
+            label="Student Code"
+            value={form.studentCode}
+            onChange={(e) => setForm({ ...form, studentCode: e.target.value })}
+            autoComplete="off"
           />
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>

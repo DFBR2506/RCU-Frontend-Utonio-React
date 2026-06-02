@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Filter, CheckCircle, XCircle, AlertCircle, Search, X } from 'lucide-react';
-import { api, APPOINTMENT_STATUSES } from '../services/api';
+import { getAppointments, confirmAppointment, cancelAppointment, completeAppointment, markNoShow } from '../api/appointmentsApi';
+import { getDoctors } from '../api/doctorsApi';
+import { getPatients } from '../api/patientsApi';
+import { getOffices } from '../api/officesApi';
+import { APPOINTMENT_STATUSES } from '../data/constants';
 import { useToast } from '../hooks/useToast';
 import useDebounce from '../hooks/useDebounce';
 import Table from '../components/UI/Table';
@@ -9,7 +13,13 @@ import SlideOver from '../components/UI/SlideOver';
 import StatusBadge from '../components/UI/StatusBadge';
 import './Appointments.css';
 
-const STATUSES = APPOINTMENT_STATUSES.map(s => s.id);
+const STATUSES = ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
+
+function parseDateTime(iso) {
+  if (!iso) return { date: '', time: '' };
+  const [date, time] = iso.split('T');
+  return { date, time: time?.substring(0, 5) || '' };
+}
 
 export default function Appointments() {
   const toast = useToast();
@@ -32,7 +42,6 @@ export default function Appointments() {
     if (urlDate !== dateFilter) {
       Promise.resolve().then(() => setDateFilter(urlDate));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
@@ -40,7 +49,6 @@ export default function Appointments() {
     if (urlQ !== searchInput) {
       Promise.resolve().then(() => setSearchInput(urlQ));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
@@ -50,18 +58,19 @@ export default function Appointments() {
   async function load() {
     setLoading(true);
     try {
-      const [appts, docs, pats, offs] = await Promise.all([
-        api.appointments.list(),
-        api.doctors.list(),
-        api.patients.list(),
-        api.offices.list(),
+      const [apptsData, docsData, patsData, offsData] = await Promise.all([
+        getAppointments({}, 0, 100),
+        getDoctors(0, 100),
+        getPatients(0, 100),
+        getOffices(),
       ]);
-      setAppointments(appts);
-      setDoctors(docs);
-      setPatients(pats);
-      setOffices(offs);
+      setAppointments(apptsData.content || apptsData);
+      setDoctors(docsData.content || docsData);
+      setPatients(patsData.content || patsData);
+      setOffices(Array.isArray(offsData) ? offsData : []);
     } catch (err) {
       console.error(err);
+      toast.error('Failed to load appointments');
     } finally {
       setLoading(false);
     }
@@ -69,12 +78,12 @@ export default function Appointments() {
 
   function getPatientName(id) {
     const p = patients.find(p => p.id === id);
-    return p ? `${p.firstName} ${p.lastName}` : 'Unknown';
+    return p ? (p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim()) : 'Unknown';
   }
 
   function getDoctorName(id) {
     const d = doctors.find(d => d.id === id);
-    return d ? d.name : 'Unknown';
+    return d ? (d.fullName || d.name || 'Unknown') : 'Unknown';
   }
 
   function getOfficeName(id) {
@@ -90,7 +99,12 @@ export default function Appointments() {
   async function transition(newStatus) {
     if (!selected) return;
     try {
-      api.appointments.update(selected.id, { status: newStatus });
+      switch (newStatus) {
+        case 'CONFIRMED': await confirmAppointment(selected.id); break;
+        case 'COMPLETED': await completeAppointment(selected.id); break;
+        case 'CANCELLED': await cancelAppointment(selected.id); break;
+        case 'NO_SHOW': await markNoShow(selected.id); break;
+      }
       await load();
       setSelected({ ...selected, status: newStatus });
       const patient = getPatientName(selected.patientId);
@@ -110,15 +124,15 @@ export default function Appointments() {
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     return appointments.filter(a => {
+      const { date, time } = parseDateTime(a.startAt);
       if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
       if (doctorFilter !== 'ALL' && a.doctorId !== parseInt(doctorFilter)) return false;
-      if (dateFilter && a.date !== dateFilter) return false;
+      if (dateFilter && date !== dateFilter) return false;
       if (q) {
         const patientName = getPatientName(a.patientId).toLowerCase();
         const doctorName = getDoctorName(a.doctorId).toLowerCase();
-        const status = a.status.toLowerCase().replace('_', ' ');
+        const status = (a.status || '').toLowerCase().replace('_', ' ');
         const notes = (a.notes || '').toLowerCase();
-        const time = a.time.toLowerCase();
         const type = (a.typeId || '').toLowerCase();
         if (
           !patientName.includes(q) &&
@@ -127,12 +141,11 @@ export default function Appointments() {
           !notes.includes(q) &&
           !time.includes(q) &&
           !type.includes(q) &&
-          !a.date.includes(q)
+          !date.includes(q)
         ) return false;
       }
       return true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointments, statusFilter, doctorFilter, dateFilter, debouncedSearch, patients, doctors]);
 
   const columns = [
@@ -140,9 +153,20 @@ export default function Appointments() {
       key: 'date',
       label: 'Date',
       width: '120px',
-      render: (a) => <span style={{ fontWeight: 600 }}>{a.date}</span>,
+      render: (a) => {
+        const { date } = parseDateTime(a.startAt);
+        return <span style={{ fontWeight: 600 }}>{date}</span>;
+      },
     },
-    { key: 'time', label: 'Time', width: '80px' },
+    {
+      key: 'time',
+      label: 'Time',
+      width: '80px',
+      render: (a) => {
+        const { time } = parseDateTime(a.startAt);
+        return time;
+      },
+    },
     {
       key: 'patient',
       label: 'Patient',
@@ -211,7 +235,7 @@ export default function Appointments() {
           <Filter size={14} color="var(--text-secondary)" />
           <span className="filter-label">Status:</span>
           <div className="status-pills">
-            {STATUSES.map(s => {
+            {['ALL', ...STATUSES].map(s => {
               const cfg = APPOINTMENT_STATUSES.find(x => x.id === s);
               return (
                 <button
@@ -234,7 +258,7 @@ export default function Appointments() {
           >
             <option value="ALL">All Doctors</option>
             {doctors.map(d => (
-              <option key={d.id} value={d.id}>{d.name}</option>
+              <option key={d.id} value={d.id}>{d.fullName || d.name}</option>
             ))}
           </select>
         </div>
@@ -326,15 +350,15 @@ export default function Appointments() {
               </div>
               <div className="detail-field">
                 <div className="detail-label">Date</div>
-                <div className="detail-value">{selected.date}</div>
+                <div className="detail-value">{parseDateTime(selected.startAt).date}</div>
               </div>
               <div className="detail-field">
                 <div className="detail-label">Time</div>
-                <div className="detail-value">{selected.time}</div>
+                <div className="detail-value">{parseDateTime(selected.startAt).time}</div>
               </div>
               <div className="detail-field">
                 <div className="detail-label">Duration</div>
-                <div className="detail-value">{selected.duration} min</div>
+                <div className="detail-value">{selected.durationMinutes || selected.duration || 30} min</div>
               </div>
               <div className="detail-field">
                 <div className="detail-label">Office</div>

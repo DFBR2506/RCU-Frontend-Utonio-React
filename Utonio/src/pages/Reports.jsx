@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, Users, AlertTriangle } from 'lucide-react';
-import { api } from '../services/api';
+import { getOfficeOccupancy, getDoctorProductivity, getNoShowPatients } from '../api/reportsApi';
 import ErrorBoundary from '../components/UI/ErrorBoundary';
 import './Reports.css';
 
@@ -10,6 +10,12 @@ const TABS = [
   { id: 'productivity', label: 'Doctor Productivity', Icon: Users },
   { id: 'no-shows', label: 'No-Show Patients', Icon: AlertTriangle },
 ];
+
+const today = new Date();
+const pad = (n) => String(n).padStart(2, '0');
+const fmtDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromDate = fmtDate(new Date(today.getFullYear(), today.getMonth(), 1));
+const toDate = fmtDate(today);
 
 function ReportsInner() {
   const [activeTab, setActiveTab] = useState('occupancy');
@@ -22,13 +28,17 @@ function ReportsInner() {
       if (!cancelled) setLoading(true);
     });
     const loaders = {
-      occupancy: () => api.reports.occupancy(),
-      productivity: () => api.reports.productivity(),
-      'no-shows': () => api.reports.noShows(),
+      occupancy: () => getOfficeOccupancy(fromDate, toDate),
+      productivity: () => getDoctorProductivity(),
+      'no-shows': () => getNoShowPatients(fromDate, toDate),
     };
     loaders[activeTab]().then(d => {
       if (cancelled) return;
       setData(Array.isArray(d) ? d : []);
+      setLoading(false);
+    }).catch(() => {
+      if (cancelled) return;
+      setData([]);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -166,7 +176,7 @@ function NoShowTable({ data }) {
           <thead>
             <tr>
               <th>Patient</th>
-              <th>Student ID</th>
+              <th>Document</th>
               <th>No-Show Count</th>
               <th>Last No-Show</th>
             </tr>
@@ -177,10 +187,10 @@ function NoShowTable({ data }) {
                 <td style={{ color: row.count >= 3 ? 'var(--accent-red)' : 'var(--text-primary)', fontWeight: row.count >= 3 ? 600 : 500 }}>
                   {row.patient}
                 </td>
-                <td>{row.studentId}</td>
+                <td>{row.documentNumber || row.studentId || '—'}</td>
                 <td>
                   <span className={`badge ${row.count >= 3 ? 'badge-no_show' : 'badge-scheduled'}`}>
-                    {row.count} {row.count >= 3 && '⚠️'}
+                    {row.count}
                   </span>
                 </td>
                 <td>{row.lastDate || '—'}</td>

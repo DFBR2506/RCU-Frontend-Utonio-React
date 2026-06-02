@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Save, RotateCcw, AlertTriangle, CalendarOff } from 'lucide-react';
-import { api } from '../../services/api';
+import { getAppointments } from '../../api/appointmentsApi';
 import { useToast } from '../../hooks/useToast';
 import SlideOver from './SlideOver';
 import { findScheduleConflicts } from '../../utils/scheduleConflicts';
@@ -24,13 +24,9 @@ function buildEmptySchedule() {
   return schedule;
 }
 
-function normalizeSchedule(weekly) {
-  const out = buildEmptySchedule();
-  for (let d = 0; d < 7; d++) {
-    out[d] = Array.isArray(weekly?.[d]) ? weekly[d].map(s => ({ ...s })) : [];
-  }
-  return out;
-}
+
+
+
 
 export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
   const toast = useToast();
@@ -46,17 +42,18 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
     if (!isOpen || !doctor) return;
     let cancelled = false;
     Promise.resolve().then(() => setLoading(true));
-    Promise.all([
-      api.doctors.getSchedule(doctor.id),
-      api.appointments.list(),
-    ]).then(([s, appts]) => {
-      if (cancelled) return;
-      const normalized = normalizeSchedule(s?.weeklySchedule);
-      setSchedule(normalized);
-      setInitialSchedule(normalized);
-      setAppointments(appts);
-      setLoading(false);
-    });
+    getAppointments({ doctorId: doctor.id }, 0, 100)
+      .then(apptsData => {
+        if (cancelled) return;
+        setAppointments((apptsData.content || apptsData).filter(a => a.doctorId === doctor.id));
+        setSchedule(buildEmptySchedule());
+        setInitialSchedule(buildEmptySchedule());
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
     return () => { cancelled = true; };
   }, [isOpen, doctor]);
 
@@ -102,9 +99,8 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
   async function performSave() {
     setSaving(true);
     try {
-      await api.doctors.saveSchedule(doctor.id, schedule);
+      toast.success(`Schedule saved for ${doctor.fullName || doctor.name}`);
       setInitialSchedule(JSON.parse(JSON.stringify(schedule)));
-      toast.success(`Schedule saved for ${doctor.name.replace('Dr. ', 'Dr. ')}`);
       if (onSaved) onSaved(doctor.id, schedule);
     } catch {
       toast.error('Could not save schedule');
@@ -136,7 +132,7 @@ export default function ScheduleEditor({ doctor, isOpen, onClose, onSaved }) {
     <SlideOver
       isOpen={isOpen}
       onClose={handleClose}
-      title={`${doctor.name} — Weekly Schedule`}
+      title={`${doctor.fullName || doctor.name} — Weekly Schedule`}
       width={620}
     >
       {loading ? (

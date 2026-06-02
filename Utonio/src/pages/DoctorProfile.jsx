@@ -1,11 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, CalendarPlus, Clock, CheckCircle2,
   AlertCircle, XCircle, Edit3, Activity, TrendingUp, ChevronRight,
 } from 'lucide-react';
-import { api } from '../services/api';
-import { APPOINTMENT_TYPES, SPECIALTIES } from '../data/constants';
+import { getDoctors } from '../api/doctorsApi';
+import { getAppointments } from '../api/appointmentsApi';
+import { getPatients } from '../api/patientsApi';
+import { getOffices } from '../api/officesApi';
+import { getSpecialties } from '../api/specialtiesApi';
+import { APPOINTMENT_TYPES } from '../data/constants';
 import StatusBadge from '../components/UI/StatusBadge';
 import ScheduleEditor from '../components/UI/ScheduleEditor';
 import EmptyState from '../components/UI/EmptyState';
@@ -14,11 +18,13 @@ import './DoctorProfile.css';
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getInitials(name) {
-  return name.replace('Dr. ', '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  return (name || '').replace('Dr. ', '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 }
 
-function getSpecialty(id) {
-  return SPECIALTIES.find(s => s.id === id) || { name: id, color: '#7B6EF6' };
+function parseDateTime(iso) {
+  if (!iso) return { date: '', time: '' };
+  const [date, time] = iso.split('T');
+  return { date, time: time?.substring(0, 5) || '' };
 }
 
 function getType(id) {
@@ -32,12 +38,7 @@ function getOfficeName(id, offices) {
 
 function getPatientName(id, patients) {
   const p = patients.find(p => p.id === id);
-  return p ? `${p.firstName} ${p.lastName}` : 'Unknown';
-}
-
-function formatJoinDate() {
-  const years = Math.floor(Math.random() * 8) + 2;
-  return `${years} year${years !== 1 ? 's' : ''} on staff`;
+  return p ? (p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim()) : 'Unknown';
 }
 
 export default function DoctorProfile() {
@@ -48,6 +49,7 @@ export default function DoctorProfile() {
   const [appointments, setAppointments] = useState([]);
   const [patients, setPatients] = useState([]);
   const [offices, setOffices] = useState([]);
+  const [specialties, setSpecialties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingSchedule, setEditingSchedule] = useState(false);
 
@@ -55,18 +57,19 @@ export default function DoctorProfile() {
     let cancelled = false;
     Promise.resolve().then(() => setLoading(true));
     Promise.all([
-      api.doctors.get(id),
-      api.doctors.getSchedule(id),
-      api.appointments.list(),
-      api.patients.list(),
-      api.offices.list(),
-    ]).then(([d, s, a, p, o]) => {
+      getDoctors(0, 100),
+      getAppointments({ doctorId: parseInt(id) }, 0, 100),
+      getPatients(0, 100),
+      getOffices(),
+      getSpecialties(),
+    ]).then(([docsData, apptsData, patsData, offsData, specsData]) => {
       if (cancelled) return;
-      setDoctor(d);
-      setSchedule(s?.weeklySchedule || null);
-      setAppointments(a.filter(x => x.doctorId === parseInt(id)));
-      setPatients(p);
-      setOffices(o);
+      const doc = (docsData.content || docsData).find(d => d.id === parseInt(id));
+      setDoctor(doc || null);
+      setAppointments((apptsData.content || apptsData).filter(a => a.doctorId === parseInt(id)));
+      setPatients((patsData.content || patsData));
+      setOffices(Array.isArray(offsData) ? offsData : []);
+      setSpecialties(specsData);
       setLoading(false);
     }).catch(() => {
       if (cancelled) return;
@@ -79,7 +82,10 @@ export default function DoctorProfile() {
     const total = appointments.length;
     const completed = appointments.filter(a => a.status === 'COMPLETED').length;
     const todayStr = new Date().toISOString().split('T')[0];
-    const upcoming = appointments.filter(a => a.date >= todayStr && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED'));
+    const upcoming = appointments.filter(a => {
+      const { date } = parseDateTime(a.startAt);
+      return date >= todayStr && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED');
+    });
     const cancelled = appointments.filter(a => a.status === 'CANCELLED').length;
     const noShows = appointments.filter(a => a.status === 'NO_SHOW').length;
     const totalFinished = total - upcoming.length;
@@ -91,27 +97,19 @@ export default function DoctorProfile() {
   const upcomingAppts = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     return [...appointments]
-      .filter(a => a.date >= todayStr && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED'))
-      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      .filter(a => {
+        const { date } = parseDateTime(a.startAt);
+        return date >= todayStr && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED');
+      })
+      .sort((a, b) => (a.startAt || '').localeCompare(b.startAt || ''));
   }, [appointments]);
 
   const pastAppts = useMemo(() => {
     return [...appointments]
       .filter(a => a.status === 'COMPLETED' || a.status === 'CANCELLED' || a.status === 'NO_SHOW')
-      .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+      .sort((a, b) => (b.startAt || '').localeCompare(a.startAt || ''))
       .slice(0, 8);
   }, [appointments]);
-
-  const weeklyHours = useMemo(() => {
-    if (!schedule) return 0;
-    let total = 0;
-    for (let d = 0; d < 7; d++) {
-      for (const slot of schedule[d] || []) {
-        if (slot.available) total += 0.5;
-      }
-    }
-    return total;
-  }, [schedule]);
 
   if (loading) {
     return (
@@ -143,8 +141,10 @@ export default function DoctorProfile() {
     );
   }
 
-  const specialty = getSpecialty(doctor.specialty);
-  const initials = getInitials(doctor.name);
+  const specId = doctor.specialtyId || doctor.specialty;
+  const specialty = specialties.find(s => s.id === specId) || { name: specId, color: '#7B6EF6' };
+  const name = doctor.fullName || doctor.name || 'Doctor';
+  const initials = getInitials(name);
   const isActive = doctor.status === 'ACTIVE';
 
   return (
@@ -167,7 +167,7 @@ export default function DoctorProfile() {
           </div>
           <div className="hero-info">
             <div className="hero-name-row">
-              <h1 className="hero-name">{doctor.name}</h1>
+              <h1 className="hero-name">{name}</h1>
               <span
                 className="hero-status"
                 style={isActive
@@ -184,16 +184,18 @@ export default function DoctorProfile() {
             >
               {specialty.name}
             </span>
-            <p className="hero-meta">{formatJoinDate()} · {weeklyHours} hrs/week scheduled</p>
+            <p className="hero-meta">{stats.total} total appointments · {stats.upcoming} upcoming</p>
             <div className="hero-contact">
               <a className="contact-pill" href={`mailto:${doctor.email}`}>
                 <Mail size={13} />
                 {doctor.email}
               </a>
-              <a className="contact-pill" href={`tel:${doctor.phone}`}>
-                <Phone size={13} />
-                {doctor.phone}
-              </a>
+              {doctor.phoneNumber && (
+                <a className="contact-pill" href={`tel:${doctor.phoneNumber}`}>
+                  <Phone size={13} />
+                  {doctor.phoneNumber}
+                </a>
+              )}
             </div>
           </div>
           <div className="hero-actions">
@@ -247,40 +249,43 @@ export default function DoctorProfile() {
               <Calendar size={16} color={specialty.color} />
               Weekly Schedule
             </h3>
-            <span className="section-meta">{weeklyHours} hours / week</span>
           </div>
-          <div className="week-schedule">
-            {DAY_SHORT.map((short, idx) => {
-              const daySlots = schedule?.[idx] || [];
-              const available = daySlots.filter(s => s.available);
-              const isToday = idx === new Date().getDay();
-              return (
-                <div
-                  key={idx}
-                  className={`week-day ${isToday ? 'today' : ''} ${daySlots.length === 0 ? 'off' : ''}`}
-                >
-                  <div className="week-day-head">
-                    <span className="week-day-name">{short}</span>
-                    {isToday && <span className="today-dot" />}
+          {schedule ? (
+            <div className="week-schedule">
+              {DAY_SHORT.map((short, idx) => {
+                const daySlots = schedule[idx] || [];
+                const available = daySlots.filter(s => s.available);
+                const isToday = idx === new Date().getDay();
+                return (
+                  <div
+                    key={idx}
+                    className={`week-day ${isToday ? 'today' : ''} ${daySlots.length === 0 ? 'off' : ''}`}
+                  >
+                    <div className="week-day-head">
+                      <span className="week-day-name">{short}</span>
+                      {isToday && <span className="today-dot" />}
+                    </div>
+                    <div className="week-day-body">
+                      {daySlots.length === 0 ? (
+                        <span className="week-day-off">Off</span>
+                      ) : (
+                        <div className="week-day-slots">
+                          <span className="week-day-count">
+                            {available.length} slot{available.length !== 1 ? 's' : ''}
+                          </span>
+                          <span className="week-day-range">
+                            {available[0]?.time} – {available[available.length - 1]?.time}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="week-day-body">
-                    {daySlots.length === 0 ? (
-                      <span className="week-day-off">Off</span>
-                    ) : (
-                      <div className="week-day-slots">
-                        <span className="week-day-count">
-                          {available.length} slot{available.length !== 1 ? 's' : ''}
-                        </span>
-                        <span className="week-day-range">
-                          {available[0]?.time} – {available[available.length - 1]?.time}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No schedule configured.</p>
+          )}
         </div>
 
         <div className="profile-section card fade-in-up stagger-3">
@@ -295,40 +300,43 @@ export default function DoctorProfile() {
             <EmptyState
               variant="appointments"
               title="No upcoming appointments"
-              message={`${doctor.name} has no future appointments scheduled.`}
+              message={`${name} has no future appointments scheduled.`}
             />
           ) : (
             <ul className="upcoming-list">
-              {upcomingAppts.slice(0, 6).map(a => (
-                <li key={a.id} className="upcoming-row">
-                  <div className="upcoming-date">
-                    <span className="upcoming-day">
-                      {new Date(a.date + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric' })}
-                    </span>
-                    <span className="upcoming-month">
-                      {new Date(a.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}
-                    </span>
-                  </div>
-                  <div className="upcoming-info">
-                    <div className="upcoming-time">
-                      <Clock size={12} />
-                      {a.time} · {a.duration} min
+              {upcomingAppts.slice(0, 6).map(a => {
+                const { date, time } = parseDateTime(a.startAt);
+                return (
+                  <li key={a.id} className="upcoming-row">
+                    <div className="upcoming-date">
+                      <span className="upcoming-day">
+                        {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric' })}
+                      </span>
+                      <span className="upcoming-month">
+                        {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}
+                      </span>
                     </div>
-                    <div className="upcoming-patient">{getPatientName(a.patientId, patients)}</div>
-                    <div className="upcoming-meta">
-                      {getType(a.typeId).name} · {getOfficeName(a.officeId, offices)}
+                    <div className="upcoming-info">
+                      <div className="upcoming-time">
+                        <Clock size={12} />
+                        {time} · {a.durationMinutes || a.duration || 30} min
+                      </div>
+                      <div className="upcoming-patient">{getPatientName(a.patientId, patients)}</div>
+                      <div className="upcoming-meta">
+                        {getType(a.typeId).name} · {getOfficeName(a.officeId, offices)}
+                      </div>
                     </div>
-                  </div>
-                  <StatusBadge status={a.status} />
-                </li>
-              ))}
+                    <StatusBadge status={a.status} />
+                  </li>
+                );
+              })}
             </ul>
           )}
           {upcomingAppts.length > 6 && (
-            <Link to={`/appointments?doctor=${doctor.id}`} className="section-cta">
+            <div onClick={() => navigate(`/appointments?doctor=${doctor.id}`)} className="section-cta">
               View all {upcomingAppts.length} upcoming
               <ChevronRight size={14} />
-            </Link>
+            </div>
           )}
         </div>
       </div>
@@ -358,13 +366,14 @@ export default function DoctorProfile() {
               <span>Status</span>
             </div>
             {pastAppts.map(a => {
+              const { date, time } = parseDateTime(a.startAt);
               const statusIcon = a.status === 'COMPLETED' ? <CheckCircle2 size={14} color="var(--accent-green)" />
                 : a.status === 'CANCELLED' ? <XCircle size={14} color="var(--text-secondary)" />
                 : <AlertCircle size={14} color="var(--accent-red)" />;
               return (
                 <div key={a.id} className="recent-row">
-                  <span className="recent-date">{a.date}</span>
-                  <span className="recent-time">{a.time}</span>
+                  <span className="recent-date">{date}</span>
+                  <span className="recent-time">{time}</span>
                   <span className="recent-patient">{getPatientName(a.patientId, patients)}</span>
                   <span className="recent-type">{getType(a.typeId).name}</span>
                   <span className="recent-office">{getOfficeName(a.officeId, offices)}</span>

@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { api } from '../services/api';
+import { getDoctors } from '../api/doctorsApi';
+import { getSpecialties } from '../api/specialtiesApi';
+import { getAvailableSlots } from '../api/availabilityApi';
 import TimeSlotGrid from '../components/UI/TimeSlotGrid';
 import './Availability.css';
+
+function parseSlots(slots) {
+  return slots.map(s => ({
+    time: (s.slotStart || s.time || '').substring(0, 5),
+    available: true,
+  }));
+}
 
 export default function Availability() {
   const [searchParams] = useSearchParams();
@@ -19,34 +28,37 @@ export default function Availability() {
   useEffect(() => {
     async function load() {
       const [docData, specData] = await Promise.all([
-        api.doctors.list(),
-        api.specialties.list(),
+        getDoctors(0, 100),
+        getSpecialties(),
       ]);
-      setDoctors(docData);
+      setDoctors(docData.content || docData);
       setSpecialties(specData);
-      if (!doctorId && docData.length > 0) {
-        setDoctorId(String(docData[0].id));
+      if (!doctorId && (docData.content || docData).length > 0) {
+        setDoctorId(String((docData.content || docData)[0].id));
       }
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!doctorId || !date) {
-      Promise.resolve().then(() => setSlots([]));
-      return;
+    if (!doctorId || !date) return;
+    async function fetchSlots() {
+      setLoading(true);
+      try {
+        const s = await getAvailableSlots(parseInt(doctorId), date);
+        setSlots(parseSlots(s));
+      } catch {
+        setSlots([]);
+      } finally {
+        setLoading(false);
+      }
     }
-    Promise.resolve().then(() => setLoading(true));
-    api.availability.get(parseInt(doctorId), date).then(s => {
-      setSlots(s);
-      setLoading(false);
-    });
+    fetchSlots();
   }, [doctorId, date]);
 
   const filteredDoctors = specialty === 'all'
     ? doctors
-    : doctors.filter(d => d.specialty === specialty);
+    : doctors.filter(d => (d.specialtyId || d.specialty) === parseInt(specialty));
 
   function handleSlotSelect(time) {
     if (!doctorId || !date) return;
@@ -86,7 +98,7 @@ export default function Availability() {
               onChange={(e) => setDoctorId(e.target.value)}
             >
               {filteredDoctors.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
+                <option key={d.id} value={d.id}>{d.fullName || d.name}</option>
               ))}
             </select>
           </div>
@@ -106,7 +118,7 @@ export default function Availability() {
         <div className="availability-result">
           <h3 className="result-title">Available Time Slots</h3>
           <p className="result-meta">
-            {loading ? 'Loading slots...' : `${slots.filter(s => s.available).length} of ${slots.length} slots open`}
+            {loading ? 'Loading slots...' : `${slots.filter(s => s.available).length} slots available`}
           </p>
           {loading ? (
             <div className="time-slot-grid" style={{ marginTop: '20px' }}>
