@@ -32,7 +32,7 @@ export default function Availability() {
         getSpecialties(),
       ]);
       setDoctors(docData.content || docData);
-      setSpecialties(specData);
+      setSpecialties(specData.content || specData || []);
       if (!doctorId && (docData.content || docData).length > 0) {
         setDoctorId(String((docData.content || docData)[0].id));
       }
